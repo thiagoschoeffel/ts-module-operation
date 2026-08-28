@@ -1,0 +1,23 @@
+{
+  "name": "ts-module-operation",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 4174 --strictPort",
+    "build": "vue-tsc --noEmit && vite build"
+  },
+  "dependencies": {
+    "ts-components": "file:../ts-components",
+    "vue": "^3.5.42"
+  },
+  "devDependencies": {
+    "@module-federation/vite": "^1.21.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3",
+    "vite": "^8.2.2",
+    "vue-tsc": "^3.1.5"
+  }
+}
