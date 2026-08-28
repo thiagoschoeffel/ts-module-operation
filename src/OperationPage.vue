@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Button, PageHeader, PlusIcon } from 'ts-components'
-import 'ts-components/style.css'
+import { Button, PageHeader, PlusIcon } from '@thiagoschoeffel/ts-components'
+import '@thiagoschoeffel/ts-components/style.css'
 import './style.css'
 import DataSyncStatus from './components/DataSyncStatus.vue'
 import { operationPages } from './config/operationPages'

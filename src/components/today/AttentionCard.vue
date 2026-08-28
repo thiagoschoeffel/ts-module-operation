@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowRightIcon, Badge, Button, Card, TriangleAlertIcon } from 'ts-components'
+import { ArrowRightIcon, Badge, Button, Card, TriangleAlertIcon } from '@thiagoschoeffel/ts-components'
 
 const attentionItems = [
   {

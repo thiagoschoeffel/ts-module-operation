@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowRightIcon, Card, Progress, TriangleAlertIcon } from 'ts-components'
+import { ArrowRightIcon, Card, Progress, TriangleAlertIcon } from '@thiagoschoeffel/ts-components'
 
 interface SummaryCard {
   label: string

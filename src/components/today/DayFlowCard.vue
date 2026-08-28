@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowRightIcon, Card, ScrollArea } from 'ts-components'
+import { ArrowRightIcon, Card, ScrollArea } from '@thiagoschoeffel/ts-components'
 
 const dayFlow = [
   { label: 'Recebidos', value: 48, pending: '6 ainda abertos' },

@@ -5,7 +5,7 @@ import {
   MessagesSquareIcon,
   PackageCheckIcon,
   TruckIcon
-} from 'ts-components'
+} from '@thiagoschoeffel/ts-components'
 import type { OperationPageConfig, OperationSection } from '../types/operation'
 import { formatLongDate } from '../utils/date'
 

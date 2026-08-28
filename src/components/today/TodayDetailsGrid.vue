@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowRightIcon, Badge, Card } from 'ts-components'
+import { ArrowRightIcon, Badge, Card } from '@thiagoschoeffel/ts-components'
 
 const menuOptions = [
   { label: 'Tradicional', status: 'Disponível', variant: 'success' },
