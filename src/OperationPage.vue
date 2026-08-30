@@ -30,7 +30,7 @@ function createOrder() {
 </script>
 
 <template>
-  <div>
+  <div class="isolate">
     <div class="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
       <PageHeader :title="page.title" :subtitle="page.subtitle">
         <template #icon>
