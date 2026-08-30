@@ -18,7 +18,7 @@ export const operationPages: Record<OperationSection, OperationPageConfig> = {
   atendimento: { title: 'Atendimento', icon: MessagesSquareIcon },
   pedidos: {
     title: 'Pedidos',
-    subtitle: 'Pedidos da operação de hoje',
+    subtitle: '42 pedidos confirmados · 4 aguardando revisão',
     icon: ClipboardListIcon
   },
   producao: { title: 'Produção', icon: CookingPotIcon },

@@ -6,6 +6,7 @@ import './style.css'
 import DataSyncStatus from './components/DataSyncStatus.vue'
 import { operationPages } from './config/operationPages'
 import OperationPlaceholderPage from './pages/OperationPlaceholderPage.vue'
+import OrderListPage from './pages/OrderListPage.vue'
 import TodayPage from './pages/TodayPage.vue'
 import type { OperationSection, OrderPage } from './types/operation'
 
@@ -30,7 +31,7 @@ function createOrder() {
 
 <template>
   <div>
-    <div class="flex flex-wrap items-center justify-between gap-4">
+    <div class="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
       <PageHeader :title="page.title" :subtitle="page.subtitle">
         <template #icon>
           <component :is="page.icon" :size="32" :stroke-width="1.75" />
@@ -50,8 +51,9 @@ function createOrder() {
       </Button>
     </div>
 
-    <main class="mt-6">
+    <main class="mt-4">
       <TodayPage v-if="props.section === 'hoje'" />
+      <OrderListPage v-else-if="props.section === 'pedidos' && props.orderPage === 'list'" />
       <OperationPlaceholderPage v-else :title="page.title" />
     </main>
   </div>

@@ -5,7 +5,7 @@ const attentionItems = [
   {
     message: '4 pedidos aguardando revisão',
     actionLabel: 'Revisar pedidos',
-    href: '/operacoes/pedidos'
+    href: '/operacoes/pedidos?tab=revisao'
   },
   {
     message: '1 entrega falhou',

@@ -25,7 +25,7 @@ const summaries: SummaryCard[] = [
     secondary: 'confirmados',
     footerLabel: 'Revisar 4 pedidos',
     hasAlert: true,
-    action: { label: 'Revisar 4 pedidos', href: '/operacoes/pedidos' }
+    action: { label: 'Revisar 4 pedidos', href: '/operacoes/pedidos?tab=revisao' }
   },
   {
     label: 'Capacidade',
