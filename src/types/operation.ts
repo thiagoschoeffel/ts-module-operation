@@ -8,7 +8,7 @@ export type OperationSection =
   | 'embalagem'
   | 'entregas'
 
-export type OrderPage = 'list' | 'new' | 'detail'
+export type OrderPage = 'list' | 'new' | 'detail' | 'edit'
 
 export interface OperationPageConfig {
   title: string

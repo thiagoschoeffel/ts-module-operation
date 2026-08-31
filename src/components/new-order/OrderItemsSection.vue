@@ -6,6 +6,7 @@ import {
   CheckIcon,
   Checkbox,
   ChevronLeftIcon,
+  ClipboardListIcon,
   Drawer,
   EmptyState,
   PlusIcon,
@@ -13,7 +14,7 @@ import {
   SectionCard,
   TriangleAlertIcon
 } from '@thiagoschoeffel/ts-components'
-import { formatCurrency, offers } from './mockData'
+import { formatCurrency, offers, riceSubstitutionOptions } from './mockData'
 import type { Customer, Offer, OrderItem } from './types'
 
 const props = defineProps<{
@@ -34,6 +35,7 @@ const proteinExtra = ref(false)
 const sauceExtra = ref(false)
 const personalizationOpen = ref(false)
 const riceChoice = ref('remove')
+const riceSubstitution = ref(riceSubstitutionOptions[0].value)
 const feedback = ref('')
 const removeConfirmationId = ref<string>()
 
@@ -65,7 +67,12 @@ function resetConfiguration() {
   proteinExtra.value = false
   sauceExtra.value = false
   personalizationOpen.value = false
-  riceChoice.value = props.customer?.preference === 'Sem arroz' ? 'remove' : 'keep'
+  riceChoice.value = props.customer?.preference === 'Sem arroz'
+    ? 'remove'
+    : props.customer?.preference === 'Substituir arroz por legumes'
+      ? 'replace'
+      : 'keep'
+  riceSubstitution.value = riceSubstitutionOptions[0].value
 }
 
 function addSimpleOffer(offer: Offer) {
@@ -96,6 +103,7 @@ function saveConfiguredItem() {
 
   const dish = dishOptions.find((option) => option.value === selectedDish.value)
   const fruit = fruitOptions.find((option) => option.value === selectedFruit.value)
+  const riceReplacement = riceSubstitutionOptions.find((option) => option.value === riceSubstitution.value)
   const item: OrderItem = {
     id: editingItemId.value ?? `item-${Date.now()}`,
     offerId: selectedOffer.value.id,
@@ -110,7 +118,11 @@ function saveConfiguredItem() {
       ...(proteinExtra.value ? ['Proteína extra · + R$ 5,00'] : []),
       ...(sauceExtra.value ? ['Molho extra · + R$ 2,00'] : [])
     ],
-    customizations: riceChoice.value === 'remove' ? ['Sem arroz'] : riceChoice.value === 'replace' ? ['Substituir arroz'] : [],
+    customizations: riceChoice.value === 'remove'
+      ? ['Sem arroz']
+      : riceChoice.value === 'replace' && riceReplacement
+        ? [`Arroz substituído por ${riceReplacement.label.toLocaleLowerCase('pt-BR')}`]
+        : [],
     hasRestrictionConflict: hasRestrictionConflict.value
   }
 
@@ -133,7 +145,11 @@ function editItem(item: OrderItem) {
   selectedFruit.value = item.details.some((detail) => detail.includes('Maçã')) ? 'apple' : 'banana'
   proteinExtra.value = item.additions.some((addition) => addition.startsWith('Proteína'))
   sauceExtra.value = item.additions.some((addition) => addition.startsWith('Molho'))
-  riceChoice.value = item.customizations.includes('Sem arroz') ? 'remove' : 'keep'
+  const riceReplacement = riceSubstitutionOptions.find((option) =>
+    item.customizations.includes(`Arroz substituído por ${option.label.toLocaleLowerCase('pt-BR')}`)
+  )
+  riceChoice.value = item.customizations.includes('Sem arroz') ? 'remove' : riceReplacement ? 'replace' : 'keep'
+  riceSubstitution.value = riceReplacement?.value ?? riceSubstitutionOptions[0].value
   personalizationOpen.value = item.customizations.length > 0
   drawerView.value = 'configuration'
   drawerOpen.value = true
@@ -164,7 +180,7 @@ function handleDrawerOpen(open: boolean) {
         v-if="props.modelValue.length === 0"
         title="Nenhum item adicionado"
         description="Escolha uma oferta do cardápio de hoje.">
-        <template #icon><PlusIcon /></template>
+        <template #icon><ClipboardListIcon /></template>
       </EmptyState>
 
       <article
@@ -199,12 +215,7 @@ function handleDrawerOpen(open: boolean) {
           </template>
           <template v-else>
             <Button type="button" variant="secondary" size="small" @click="editItem(item)">Editar</Button>
-            <button
-              type="button"
-              class="rounded-lg px-2.5 text-xs font-medium text-slate-400 outline-none transition-colors hover:text-red-600 focus-visible:ring-2 focus-visible:ring-slate-500/40"
-              @click="removeConfirmationId = item.id">
-              Remover
-            </button>
+            <Button type="button" variant="danger" size="small" @click="removeConfirmationId = item.id">Remover</Button>
           </template>
         </div>
       </article>
@@ -281,8 +292,8 @@ function handleDrawerOpen(open: boolean) {
             <template #icon><CheckIcon /></template>
           </Alert>
 
-          <div class="space-y-3">
-            <p class="text-sm font-medium text-slate-700">Adicionais</p>
+          <div class="flex flex-wrap gap-x-4 gap-y-3">
+            <p class="w-full text-sm font-medium text-slate-700">Adicionais</p>
             <Checkbox v-model="proteinExtra" label="Proteína extra" description="+ R$ 5,00" />
             <Checkbox v-model="sauceExtra" label="Molho extra" description="+ R$ 2,00" />
           </div>
@@ -291,6 +302,12 @@ function handleDrawerOpen(open: boolean) {
             <Button type="button" variant="secondary" size="small" @click="personalizationOpen = !personalizationOpen">Personalizar</Button>
             <div v-if="personalizationOpen" class="mt-4 rounded-lg border border-slate-200 p-4">
               <RadioGroup v-model="riceChoice" label="Arroz" :options="riceOptions" />
+              <RadioGroup
+                v-if="riceChoice === 'replace'"
+                v-model="riceSubstitution"
+                class="mt-4 border-t border-slate-200 pt-4"
+                label="Substituir por"
+                :options="riceSubstitutionOptions" />
             </div>
           </div>
         </div>

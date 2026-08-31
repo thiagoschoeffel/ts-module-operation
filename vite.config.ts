@@ -10,6 +10,9 @@ export default defineConfig({
     federation({
       name: 'moduleOperation',
       filename: 'remoteEntry.js',
+      dev: {
+        remoteHmr: true
+      },
       exposes: {
         './OperationPage': './src/OperationPage.vue'
       },

@@ -22,7 +22,8 @@ import {
   type MultiSelectOption,
   type TabItem
 } from '@thiagoschoeffel/ts-components'
-import { mockOrders, type DeliveryWindow, type MockOrder as Order, type OrderChannel, type OrderStatus } from '../mocks/orders'
+import { getOrderSummaries } from '../mocks/orderDetail'
+import type { DeliveryWindow, MockOrder as Order, OrderChannel, OrderStatus } from '../mocks/orders'
 
 type OrderSortKey = 'id' | 'customer' | 'statusLabel' | 'deliveryWindow' | 'total'
 
@@ -35,12 +36,13 @@ const initialStatus = initialSearchParams.get('tab') ?? 'todos'
 const initialSortKey = initialSearchParams.get('ordenar')
 const initialSortDirection = initialSearchParams.get('direcao')
 const hasInitialDefaultSort = initialSortKey === 'padrao'
+const initialPage = Number(initialSearchParams.get('pagina'))
 
 const activeStatus = ref(validStatusValues.has(initialStatus as OrderStatus | 'todos') ? initialStatus : 'todos')
 const search = ref(initialSearchParams.get('busca') ?? '')
 const debouncedSearch = ref(search.value)
 const filtersOpen = ref(false)
-const currentPage = ref(1)
+const currentPage = ref(Number.isInteger(initialPage) && initialPage > 0 ? initialPage : 1)
 const itemsPerPage = 10
 const activeSortKey = ref<OrderSortKey | undefined>(
   validSortKeys.has(initialSortKey as OrderSortKey)
@@ -91,7 +93,7 @@ const statusTabs: TabItem[] = [
   { value: 'problema', label: 'Problemas' }
 ]
 
-const orders: Order[] = mockOrders
+const orders: Order[] = getOrderSummaries()
 
 watch(search, (value) => {
   if (searchDebounce)
@@ -140,7 +142,8 @@ function persistScreenState() {
     origens: selectedChannels.value.length ? selectedChannels.value.join(',') : undefined,
     janelas: selectedDeliveryWindows.value.length ? selectedDeliveryWindows.value.join(',') : undefined,
     ordenar: activeSortKey.value ?? 'padrao',
-    direcao: activeSortDirection.value
+    direcao: activeSortDirection.value,
+    pagina: currentPage.value > 1 ? String(currentPage.value) : undefined
   }
 
   for (const [key, value] of Object.entries(values)) {
@@ -169,8 +172,10 @@ function restoreScreenStateFromUrl() {
     .filter((value) => validDeliveryWindows.has(value as DeliveryWindow))
   const sortKey = params.get('ordenar')
   const sortDirection = params.get('direcao')
+  const page = Number(params.get('pagina'))
   activeSortKey.value = validSortKeys.has(sortKey as OrderSortKey) ? sortKey as OrderSortKey : undefined
   activeSortDirection.value = sortDirection === 'asc' || sortDirection === 'desc' ? sortDirection : undefined
+  currentPage.value = Number.isInteger(page) && page > 0 ? page : 1
 }
 
 function handlePopState() {
@@ -183,9 +188,10 @@ function handlePopState() {
 
 watch([activeStatus, debouncedSearch, selectedChannels, selectedDeliveryWindows, activeSortKey, activeSortDirection], () => {
   currentPage.value = 1
-  persistScreenState()
   setRowsLoading()
 })
+
+watch([activeStatus, debouncedSearch, selectedChannels, selectedDeliveryWindows, activeSortKey, activeSortDirection, currentPage], persistScreenState)
 
 onMounted(() => {
   window.addEventListener('popstate', handlePopState)
@@ -245,11 +251,19 @@ function clearSearchAndAdvancedFilters() {
 }
 
 function createOrder() {
-  window.location.assign('/operacoes/pedidos/novo')
+  window.location.assign(`/operacoes/pedidos/novo?retorno=${encodeURIComponent(listReturnUrl())}`)
 }
 
 function openOrder(orderId: number) {
-  window.location.assign(`/operacoes/pedidos/${orderId}`)
+  window.location.assign(orderHref(orderId))
+}
+
+function listReturnUrl() {
+  return `${window.location.pathname}${window.location.search}`
+}
+
+function orderHref(orderId: number) {
+  return `/operacoes/pedidos/${orderId}?retorno=${encodeURIComponent(listReturnUrl())}`
 }
 
 const ordersMatchingSearchAndFilters = computed(() => {
@@ -554,7 +568,7 @@ function getOrder(row: DataTableRow) {
               </p>
               <template #footer>
                 <a
-                  :href="`/operacoes/pedidos/${order.id}`"
+                  :href="orderHref(order.id)"
                   class="-mx-6 -my-4 flex items-center justify-between gap-3 px-6 py-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-800">
                   <span>{{ orderActions[order.status] }}</span>
                   <ArrowRightIcon class="size-4 shrink-0" aria-hidden="true" />
