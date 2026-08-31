@@ -8,6 +8,7 @@ import {
   Chips,
   DataTable,
   Drawer,
+  EmptyState,
   Input,
   MultiSelect,
   Pagination,
@@ -21,25 +22,9 @@ import {
   type MultiSelectOption,
   type TabItem
 } from '@thiagoschoeffel/ts-components'
+import { mockOrders, type DeliveryWindow, type MockOrder as Order, type OrderChannel, type OrderStatus } from '../mocks/orders'
 
-type OrderStatus = 'revisao' | 'aberto' | 'andamento' | 'concluido' | 'problema'
-type OrderChannel = 'WhatsApp' | 'Telefone' | 'Balcão'
-type DeliveryWindow = '11:00–12:00' | '12:00–13:00' | '13:00–14:00'
 type OrderSortKey = 'id' | 'customer' | 'statusLabel' | 'deliveryWindow' | 'total'
-
-interface Order {
-  id: number
-  createdAt: string
-  customer: string
-  phone: string
-  channel: OrderChannel
-  itemCount: number
-  status: OrderStatus
-  statusLabel: string
-  deliveryWindow?: DeliveryWindow
-  total: string
-  dietaryRestriction?: boolean
-}
 
 const initialSearchParams = new URLSearchParams(window.location.search)
 const validStatusValues = new Set<OrderStatus | 'todos'>(['todos', 'revisao', 'aberto', 'andamento', 'concluido', 'problema'])
@@ -106,45 +91,7 @@ const statusTabs: TabItem[] = [
   { value: 'problema', label: 'Problemas' }
 ]
 
-const orders: Order[] = [
-  {
-    id: 148,
-    createdAt: '10:42',
-    customer: 'Maria Silva',
-    phone: '(11) 99876-5432',
-    channel: 'WhatsApp',
-    itemCount: 2,
-    status: 'revisao',
-    statusLabel: 'Pronto para revisão',
-    deliveryWindow: '11:00–12:00',
-    total: 'R$ 9,00',
-    dietaryRestriction: true
-  },
-  {
-    id: 147,
-    createdAt: '10:35',
-    customer: 'João Souza',
-    phone: '(11) 98765-4321',
-    channel: 'Telefone',
-    itemCount: 1,
-    status: 'andamento',
-    statusLabel: 'Em produção',
-    deliveryWindow: '12:00–13:00',
-    total: 'R$ 32,00'
-  },
-  {
-    id: 146,
-    createdAt: '10:21',
-    customer: 'Ana Lima',
-    phone: '(11) 97654-3210',
-    channel: 'Balcão',
-    itemCount: 3,
-    status: 'concluido',
-    statusLabel: 'Confirmado',
-    deliveryWindow: '13:00–14:00',
-    total: 'R$ 0,00'
-  }
-]
+const orders: Order[] = mockOrders
 
 watch(search, (value) => {
   if (searchDebounce)
@@ -370,6 +317,22 @@ const activeFilterCount = computed(() =>
 )
 const hasSearch = computed(() => Boolean(debouncedSearch.value.trim()))
 const hasAdvancedFilters = computed(() => activeFilterCount.value > 0)
+const emptyStateTitle = computed(() => {
+  if (hasLoadingError.value)
+    return 'Não foi possível carregar os pedidos'
+  return orders.length === 0 ? 'Nenhum pedido hoje' : 'Nenhum pedido encontrado'
+})
+const emptyStateDescription = computed(() => {
+  if (hasLoadingError.value)
+    return 'Verifique a conexão e tente carregar a lista novamente.'
+  if (orders.length === 0)
+    return 'Os pedidos da operação aparecerão aqui conforme forem registrados.'
+  if (hasSearch.value && hasAdvancedFilters.value)
+    return 'Nenhum pedido corresponde à busca e aos filtros atuais.'
+  if (hasSearch.value)
+    return `Não encontramos pedidos para “${debouncedSearch.value.trim()}”.`
+  return 'Nenhum pedido corresponde aos filtros selecionados.'
+})
 
 function selectedLabels(options: MultiSelectOption[], values: string[]) {
   const selectedValues = new Set(values)
@@ -546,62 +509,23 @@ function getOrder(row: DataTableRow) {
             </template>
 
             <template v-else-if="hasLoadingError || visibleOrders.length === 0">
-              <div class="rounded-lg border border-slate-200 bg-white px-5 py-10 text-center shadow-sm">
-                <p class="font-medium text-slate-800">
-                  <template v-if="hasLoadingError">Não foi possível carregar os pedidos.</template>
-                  <template v-else>{{ orders.length === 0 ? 'Nenhum pedido hoje' : 'Nenhum pedido encontrado' }}</template>
-                </p>
-                <p class="mx-auto mt-2 max-w-sm text-sm text-slate-500">
-                  <template v-if="hasLoadingError">Verifique a conexão e tente carregar a lista novamente.</template>
-                  <template v-else-if="orders.length === 0">Os pedidos da operação aparecerão aqui conforme forem registrados.</template>
-                  <template v-else-if="hasSearch && hasAdvancedFilters">Nenhum pedido corresponde à busca e aos filtros atuais.</template>
-                  <template v-else-if="hasSearch">Não encontramos pedidos para “{{ debouncedSearch.trim() }}”.</template>
-                  <template v-else>Nenhum pedido corresponde aos filtros selecionados.</template>
-                </p>
-                <Button
-                  v-if="hasLoadingError"
-                  class="mt-4"
-                  type="button"
-                  size="small"
-                  @click="retryLoading">
-                  Tentar novamente
-                </Button>
-                <Button
-                  v-else-if="orders.length === 0"
-                  class="mt-4"
-                  type="button"
-                  size="small"
-                  @click="createOrder">
-                  Novo pedido
-                </Button>
-                <Button
-                  v-else-if="hasSearch && hasAdvancedFilters"
-                  class="mt-4"
-                  type="button"
-                  variant="secondary"
-                  size="small"
-                  @click="clearSearchAndAdvancedFilters">
-                  Limpar busca e filtros
-                </Button>
-                <Button
-                  v-else-if="hasSearch"
-                  class="mt-4"
-                  type="button"
-                  variant="secondary"
-                  size="small"
-                  @click="clearSearch">
-                  Limpar busca
-                </Button>
-                <Button
-                  v-else
-                  class="mt-4"
-                  type="button"
-                  variant="secondary"
-                  size="small"
-                  @click="clearAdvancedFilters">
-                  Limpar filtros
-                </Button>
-              </div>
+              <EmptyState
+                class="bg-white shadow-sm"
+                size="large"
+                :title="emptyStateTitle"
+                :description="emptyStateDescription">
+                <template #icon>
+                  <TriangleAlertIcon v-if="hasLoadingError" />
+                  <SearchIcon v-else />
+                </template>
+                <template #action>
+                  <Button v-if="hasLoadingError" type="button" size="small" @click="retryLoading">Tentar novamente</Button>
+                  <Button v-else-if="orders.length === 0" type="button" size="small" @click="createOrder">Novo pedido</Button>
+                  <Button v-else-if="hasSearch && hasAdvancedFilters" type="button" variant="secondary" size="small" @click="clearSearchAndAdvancedFilters">Limpar busca e filtros</Button>
+                  <Button v-else-if="hasSearch" type="button" variant="secondary" size="small" @click="clearSearch">Limpar busca</Button>
+                  <Button v-else type="button" variant="secondary" size="small" @click="clearAdvancedFilters">Limpar filtros</Button>
+                </template>
+              </EmptyState>
             </template>
 
             <template v-else>
@@ -641,7 +565,7 @@ function getOrder(row: DataTableRow) {
           </div>
 
           <DataTable
-            class="hidden h-fit max-h-[min(36rem,calc(100dvh-18rem))] md:block"
+            class="hidden h-[min(36rem,calc(100dvh-18rem))] md:block"
             :columns="tableColumns"
             :rows="hasLoadingError ? [] : tableRows"
             :selectable="false"
@@ -696,67 +620,23 @@ function getOrder(row: DataTableRow) {
             </template>
 
             <template #empty>
-              <div class="mx-auto max-w-sm space-y-2 text-center">
-                <p class="font-medium text-slate-800">
-                  <template v-if="hasLoadingError">Não foi possível carregar os pedidos.</template>
-                  <template v-else>{{ orders.length === 0 ? 'Nenhum pedido hoje' : 'Nenhum pedido encontrado' }}</template>
-                </p>
-                <p class="text-sm text-slate-500">
-                  <template v-if="hasLoadingError">
-                    Verifique a conexão e tente carregar a lista novamente.
-                  </template>
-                  <template v-else-if="orders.length === 0">
-                    Os pedidos da operação aparecerão aqui conforme forem registrados.
-                  </template>
-                  <template v-else-if="hasSearch && hasAdvancedFilters">
-                    Nenhum pedido corresponde à busca e aos filtros atuais.
-                  </template>
-                  <template v-else-if="hasSearch">
-                    Não encontramos pedidos para “{{ debouncedSearch.trim() }}”.
-                  </template>
-                  <template v-else>
-                    Nenhum pedido corresponde aos filtros selecionados.
-                  </template>
-                </p>
-                <Button
-                  v-if="hasLoadingError"
-                  type="button"
-                  size="small"
-                  @click="retryLoading">
-                  Tentar novamente
-                </Button>
-                <Button
-                  v-else-if="orders.length === 0"
-                  type="button"
-                  size="small"
-                  @click="createOrder">
-                  Novo pedido
-                </Button>
-                <Button
-                  v-else-if="hasSearch && hasAdvancedFilters"
-                  type="button"
-                  variant="secondary"
-                  size="small"
-                  @click="clearSearchAndAdvancedFilters">
-                  Limpar busca e filtros
-                </Button>
-                <Button
-                  v-else-if="hasSearch"
-                  type="button"
-                  variant="secondary"
-                  size="small"
-                  @click="clearSearch">
-                  Limpar busca
-                </Button>
-                <Button
-                  v-else
-                  type="button"
-                  variant="secondary"
-                  size="small"
-                  @click="clearAdvancedFilters">
-                  Limpar filtros
-                </Button>
-              </div>
+              <EmptyState
+                :bordered="false"
+                size="small"
+                :title="emptyStateTitle"
+                :description="emptyStateDescription">
+                <template #icon>
+                  <TriangleAlertIcon v-if="hasLoadingError" />
+                  <SearchIcon v-else />
+                </template>
+                <template #action>
+                  <Button v-if="hasLoadingError" type="button" size="small" @click="retryLoading">Tentar novamente</Button>
+                  <Button v-else-if="orders.length === 0" type="button" size="small" @click="createOrder">Novo pedido</Button>
+                  <Button v-else-if="hasSearch && hasAdvancedFilters" type="button" variant="secondary" size="small" @click="clearSearchAndAdvancedFilters">Limpar busca e filtros</Button>
+                  <Button v-else-if="hasSearch" type="button" variant="secondary" size="small" @click="clearSearch">Limpar busca</Button>
+                  <Button v-else type="button" variant="secondary" size="small" @click="clearAdvancedFilters">Limpar filtros</Button>
+                </template>
+              </EmptyState>
             </template>
           </DataTable>
 
