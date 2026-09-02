@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Button, Card, Drawer, EmptyState, HomeIcon, Input, PlusIcon, RadioGroup, ScrollArea, Select } from '@thiagoschoeffel/ts-components'
+import { Button, Card, Drawer, EmptyState, HomeIcon, Input, PlusIcon, RadioGroup, Select } from '@thiagoschoeffel/ts-components'
 import { formatAddressLocation, formatAddressStreet } from './address'
 import { deliveryWindowOptions } from './mockData'
 import type { Customer, CustomerAddress } from './types'
@@ -157,51 +157,49 @@ function addAddress() {
               {{ props.address ? 'Alterar' : addresses.length ? 'Escolher endereço' : 'Adicionar endereço' }}
             </Button>
           </template>
-          <ScrollArea class="-mr-5 h-full w-[calc(100%+1.25rem)]" scrollbar-visibility="auto">
-            <div class="space-y-5 pr-5">
-              <div v-if="addresses.length" class="space-y-2">
-                <RadioGroup
-                  :model-value="selectedAddressId"
-                  :options="addressOptions"
-                  label="Endereços cadastrados"
-                  name="delivery-address"
-                  @update:model-value="chooseAddressById" />
-              </div>
-              <EmptyState
-                v-else
-                size="small"
-                title="Nenhum endereço cadastrado"
-                description="Preencha os dados abaixo para cadastrar o primeiro endereço deste cliente.">
-                <template #icon><HomeIcon /></template>
-              </EmptyState>
-              <div class="border-t border-slate-200 pt-5">
-                <p class="mb-3 text-sm font-medium text-slate-700">Novo endereço</p>
-                <div class="space-y-3">
-                  <Input v-model="newAddressLabel" label="Identificação" placeholder="Ex.: Casa ou Trabalho" autocomplete="off" required />
-                  <Input
-                    v-model="newAddressPostalCode"
-                    label="CEP"
-                    placeholder="00000-000"
-                    autocomplete="postal-code"
-                    inputmode="numeric"
-                    :maxlength="9"
-                    required
-                    @input="formatPostalCode" />
-                  <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7rem]">
-                    <Input v-model="newAddressStreet" label="Logradouro" placeholder="Rua, avenida..." autocomplete="address-line1" required />
-                    <Input v-model="newAddressNumber" label="Número" placeholder="Nº ou s/n" autocomplete="address-line2" required />
-                  </div>
-                  <Input v-model="newAddressComplement" label="Complemento (opcional)" placeholder="Apto., bloco, sala..." autocomplete="address-line3" />
-                  <Input v-model="newAddressNeighborhood" label="Bairro" placeholder="Bairro" required />
-                  <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7rem]">
-                    <Input v-model="newAddressCity" label="Cidade" placeholder="Cidade" autocomplete="address-level2" required />
-                    <Select v-model="newAddressState" label="UF" :options="stateOptions" required />
-                  </div>
-                  <Input v-model="newAddressReferencePoint" label="Ponto de referência (opcional)" placeholder="Ex.: próximo à praça" />
+          <div class="space-y-5">
+            <div v-if="addresses.length" class="space-y-2">
+              <RadioGroup
+                :model-value="selectedAddressId"
+                :options="addressOptions"
+                label="Endereços cadastrados"
+                name="delivery-address"
+                @update:model-value="chooseAddressById" />
+            </div>
+            <EmptyState
+              v-else
+              size="small"
+              title="Nenhum endereço cadastrado"
+              description="Preencha os dados abaixo para cadastrar o primeiro endereço deste cliente.">
+              <template #icon><HomeIcon /></template>
+            </EmptyState>
+            <div class="border-t border-slate-200 pt-5">
+              <p class="mb-3 text-sm font-medium text-slate-700">Novo endereço</p>
+              <div class="space-y-3">
+                <Input v-model="newAddressLabel" label="Identificação" placeholder="Ex.: Casa ou Trabalho" autocomplete="off" required />
+                <Input
+                  v-model="newAddressPostalCode"
+                  label="CEP"
+                  placeholder="00000-000"
+                  autocomplete="postal-code"
+                  inputmode="numeric"
+                  :maxlength="9"
+                  required
+                  @input="formatPostalCode" />
+                <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7rem]">
+                  <Input v-model="newAddressStreet" label="Logradouro" placeholder="Rua, avenida..." autocomplete="address-line1" required />
+                  <Input v-model="newAddressNumber" label="Número" placeholder="Nº ou s/n" autocomplete="address-line2" required />
                 </div>
+                <Input v-model="newAddressComplement" label="Complemento (opcional)" placeholder="Apto., bloco, sala..." autocomplete="address-line3" />
+                <Input v-model="newAddressNeighborhood" label="Bairro" placeholder="Bairro" required />
+                <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7rem]">
+                  <Input v-model="newAddressCity" label="Cidade" placeholder="Cidade" autocomplete="address-level2" required />
+                  <Select v-model="newAddressState" label="UF" :options="stateOptions" required />
+                </div>
+                <Input v-model="newAddressReferencePoint" label="Ponto de referência (opcional)" placeholder="Ex.: próximo à praça" />
               </div>
             </div>
-          </ScrollArea>
+          </div>
 
           <template #footer>
             <div class="flex justify-end">

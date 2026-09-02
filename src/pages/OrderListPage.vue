@@ -453,7 +453,7 @@ function getOrder(row: DataTableRow) {
               <Drawer
                 v-model:open="filtersOpen"
                 side="right"
-                size="small"
+                size="large"
                 title="Filtros"
                 description="Refine os pedidos exibidos nesta lista.">
                 <template #trigger>

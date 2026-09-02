@@ -1,5 +1,5 @@
 import { customers, formatCurrency, offers } from '../components/new-order/mockData'
-import type { CustomerAddress, OrderItem } from '../components/new-order/types'
+import type { CustomerAddress, OrderItem, PaymentCondition, PaymentMethod } from '../components/new-order/types'
 import { mockOrders, type MockOrder, type OrderStatus } from './orders'
 
 export type OrderDetailStatus =
@@ -73,6 +73,9 @@ export interface OrderDetail {
   deliveryFee: number
   items: OrderItem[]
   note?: string
+  paymentCondition: PaymentCondition
+  paymentMethod: PaymentMethod
+  paymentDueDate?: string
   planCreditCount: number
   planCreditValue: number
   financialCreditValue: number
@@ -234,7 +237,10 @@ const featuredOrder: OrderDetail = {
       hasRestrictionConflict: false
     }
   ],
-  note: 'Entregar na portaria. Cliente pediu para não tocar o interfone.',
+  note: '<h3>Orientações para a entrega</h3><p><strong>Entregar na portaria.</strong> Cliente estará em reunião no horário previsto.</p><ul><li>Não tocar o interfone.</li><li>Ligar antes de sair para a entrega.</li></ul><blockquote>Confirmar o recebimento com a portaria.</blockquote>',
+  paymentCondition: 'deferred',
+  paymentMethod: 'pix',
+  paymentDueDate: '2026-09-10',
   planCreditCount: 2,
   planCreditValue: 59,
   financialCreditValue: 0,
@@ -357,6 +363,8 @@ function detailFromSummary(order: MockOrder): OrderDetail {
     deliveryWindow: order.deliveryWindow,
     deliveryFee,
     items: genericItems(order),
+    paymentCondition: 'cash',
+    paymentMethod: 'pix',
     planCreditCount: 0,
     planCreditValue: 0,
     financialCreditValue: 0,
@@ -379,6 +387,8 @@ function readStoredOrders(): OrderDetail[] {
       const fallbackState = domainStateFor(order.status)
       return {
         ...order,
+        paymentCondition: order.paymentCondition ?? 'cash',
+        paymentMethod: order.paymentMethod ?? 'pix',
         discountValue: order.discountValue ?? 0,
         pendingIssues: order.pendingIssues ?? [],
         allowedActions: order.allowedActions ?? fallbackState.allowedActions,

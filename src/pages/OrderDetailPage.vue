@@ -9,13 +9,14 @@ import {
   ChevronLeftIcon,
   Drawer,
   PackageCheckIcon,
+  Progress,
   sanitizeRichText,
   Select,
   Textarea,
   TriangleAlertIcon
 } from '@thiagoschoeffel/ts-components'
 import { formatAddressLocation, formatAddressStreet } from '../components/new-order/address'
-import { formatCurrency } from '../components/new-order/mockData'
+import { formatCurrency, paymentConditionOptions, paymentMethodOptions } from '../components/new-order/mockData'
 import {
   cancelOrderDetail,
   confirmOrderDetail,
@@ -37,6 +38,7 @@ const loadFailed = ref(false)
 const order = ref<OrderDetail>()
 const confirmationOpen = ref(false)
 const validating = ref(false)
+const validationProgress = ref(0)
 const validationComplete = ref(false)
 const confirming = ref(false)
 const confirmationFeedback = ref('')
@@ -54,6 +56,7 @@ const rescheduleSubmitted = ref(false)
 const rescheduling = ref(false)
 let loadingTimeout: ReturnType<typeof setTimeout> | undefined
 let validationTimeout: ReturnType<typeof setTimeout> | undefined
+let validationProgressInterval: ReturnType<typeof setInterval> | undefined
 let confirmationTimeout: ReturnType<typeof setTimeout> | undefined
 let actionTimeout: ReturnType<typeof setTimeout> | undefined
 
@@ -68,6 +71,11 @@ const total = computed(() => Math.max(0,
 const hasBlockingRestriction = computed(() => order.value?.items.some(item => item.hasRestrictionConflict) ?? false)
 const itemCount = computed(() => order.value?.items.length ?? 0)
 const sanitizedOrderNote = computed(() => sanitizeRichText(order.value?.note ?? ''))
+const paymentConditionLabel = computed(() => paymentConditionOptions.find(option => option.value === order.value?.paymentCondition)?.label)
+const paymentMethodLabel = computed(() => paymentMethodOptions.find(option => option.value === order.value?.paymentMethod)?.label)
+const paymentDueDateLabel = computed(() => order.value?.paymentDueDate
+  ? new Intl.DateTimeFormat('pt-BR').format(new Date(`${order.value.paymentDueDate}T12:00:00`))
+  : undefined)
 const operationalIssues = computed(() => {
   if (!order.value)
     return []
@@ -175,19 +183,25 @@ function hasAction(action: OrderAllowedAction) {
 function openConfirmation() {
   if (validationTimeout)
     clearTimeout(validationTimeout)
+  if (validationProgressInterval)
+    clearInterval(validationProgressInterval)
   confirmationOpen.value = true
   validating.value = true
+  validationProgress.value = 0
   validationComplete.value = false
-  validationTimeout = setTimeout(() => {
-    validating.value = false
-    validationComplete.value = true
-  }, 600)
-}
+  validationProgressInterval = setInterval(() => {
+    validationProgress.value = Math.min(100, validationProgress.value + (100 / 30))
+    if (validationProgress.value < 100)
+      return
 
-function closeConfirmation(close: () => void) {
-  close()
-  validating.value = false
-  validationComplete.value = false
+    if (validationProgressInterval)
+      clearInterval(validationProgressInterval)
+    validationProgressInterval = undefined
+    validationTimeout = setTimeout(() => {
+      validating.value = false
+      validationComplete.value = true
+    }, 250)
+  }, 100)
 }
 
 function confirmOrder(close: () => void) {
@@ -272,6 +286,7 @@ onMounted(loadOrder)
 onBeforeUnmount(() => {
   if (loadingTimeout) clearTimeout(loadingTimeout)
   if (validationTimeout) clearTimeout(validationTimeout)
+  if (validationProgressInterval) clearInterval(validationProgressInterval)
   if (confirmationTimeout) clearTimeout(confirmationTimeout)
   if (actionTimeout) clearTimeout(actionTimeout)
 })
@@ -319,16 +334,16 @@ onBeforeUnmount(() => {
         <template #icon><CheckIcon /></template>
       </Alert>
 
-      <div class="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+      <div class="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex flex-col items-start gap-2">
+          <p class="font-medium text-slate-800">{{ order.customer.name }}</p>
+          <p class="text-sm text-slate-500">{{ statusTimestamp }}</p>
           <div class="flex flex-wrap items-center gap-2">
             <Badge size="medium" :variant="statusPresentation[order.status].variant">
               {{ statusPresentation[order.status].label }}
             </Badge>
             <Badge v-if="order.readyForReview" size="medium" variant="warning">Pronto para revisão</Badge>
           </div>
-          <p class="mt-3 font-medium text-slate-800">{{ order.customer.name }}</p>
-          <p class="mt-1 text-sm text-slate-500">{{ statusTimestamp }}</p>
         </div>
         <div class="flex flex-col gap-3 sm:items-end">
           <button
@@ -463,13 +478,19 @@ onBeforeUnmount(() => {
           <Card>
             <template #header><h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500">Entrega</h2></template>
             <div class="grid gap-5 sm:grid-cols-3">
-              <div v-if="order.deliveryAddress" class="sm:col-span-2">
-                <p class="font-semibold text-slate-900">{{ order.deliveryAddress.label }}</p>
-                <p class="mt-1 text-slate-600">{{ formatAddressStreet(order.deliveryAddress) }}</p>
-                <p class="text-slate-500">{{ formatAddressLocation(order.deliveryAddress) }}</p>
-                <p v-if="order.deliveryAddress.referencePoint" class="mt-2 text-xs text-slate-500">Referência: {{ order.deliveryAddress.referencePoint }}</p>
+              <div class="sm:col-span-2">
+                <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Endereço</p>
+                <template v-if="order.deliveryAddress">
+                  <p class="mt-1 font-semibold text-slate-900">{{ order.deliveryAddress.label }}</p>
+                  <p class="mt-1 text-slate-600">{{ formatAddressStreet(order.deliveryAddress) }}</p>
+                  <p class="text-slate-500">{{ formatAddressLocation(order.deliveryAddress) }}</p>
+                  <p v-if="order.deliveryAddress.referencePoint" class="mt-2 text-xs text-slate-500">Referência: {{ order.deliveryAddress.referencePoint }}</p>
+                </template>
+                <p v-else class="mt-1 flex items-start gap-2 font-medium text-amber-700">
+                  <TriangleAlertIcon class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                  Endereço não definido
+                </p>
               </div>
-              <p v-else class="font-medium text-amber-700 sm:col-span-2">Endereço não definido</p>
               <div class="space-y-4">
                 <div><p class="text-xs font-medium uppercase tracking-wide text-slate-400">Janela</p><p class="mt-1 font-medium text-slate-700">{{ order.deliveryWindow ?? 'Não definida' }}</p></div>
                 <div><p class="text-xs font-medium uppercase tracking-wide text-slate-400">Taxa</p><p class="mt-1 font-medium text-slate-700">{{ formatCurrency(order.deliveryFee) }}</p></div>
@@ -477,43 +498,80 @@ onBeforeUnmount(() => {
             </div>
           </Card>
 
-          <section aria-labelledby="order-items-title">
-            <h2 id="order-items-title" class="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Itens</h2>
+          <Card aria-labelledby="order-items-title">
+            <template #header>
+              <h2 id="order-items-title" class="text-xs font-semibold uppercase tracking-wider text-slate-500">Itens do pedido</h2>
+            </template>
             <div class="space-y-3">
-              <Card v-for="item in order.items" :key="item.id">
+              <article
+                v-for="item in order.items"
+                :key="item.id"
+                class="rounded-lg border border-slate-200 bg-white p-4">
                 <div class="flex items-start justify-between gap-4">
-                  <h3 class="font-semibold text-slate-900">{{ item.name }}</h3>
-                  <p class="shrink-0 font-semibold text-slate-900">{{ formatCurrency(item.price) }}</p>
+                  <div>
+                    <h3 class="font-semibold text-slate-800">{{ item.name }}</h3>
+                    <p v-for="detail in item.details" :key="detail" class="mt-1 text-sm text-slate-500">{{ detail }}</p>
+                  </div>
+                  <p class="shrink-0 font-semibold text-slate-800">{{ formatCurrency(item.price) }}</p>
                 </div>
-                <div class="mt-4 space-y-3">
-                  <p v-for="detail in item.details" :key="detail" class="text-slate-600">{{ detail }}</p>
-                </div>
-                <div v-if="item.customizations.length || item.additions.length" class="mt-5 grid gap-5 border-t border-slate-100 pt-4 sm:grid-cols-2">
+                <div v-if="item.customizations.length || item.additions.length" class="mt-4 grid gap-3 border-t border-slate-100 pt-3 sm:grid-cols-2">
                   <div v-if="item.customizations.length">
-                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Personalizações</p>
-                    <p v-for="customization in item.customizations" :key="customization" class="mt-2 text-slate-700">{{ customization }}</p>
+                    <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Personalização</p>
+                    <p v-for="customization in item.customizations" :key="customization" class="mt-1 text-sm text-slate-600">{{ customization }}</p>
                   </div>
                   <div v-if="item.additions.length">
-                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">Adicionais</p>
-                    <p v-for="addition in item.additions" :key="addition" class="mt-2 text-slate-700">{{ addition }}</p>
+                    <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Adicional</p>
+                    <p v-for="addition in item.additions" :key="addition" class="mt-1 text-sm text-slate-600">{{ addition }}</p>
                   </div>
                 </div>
                 <Alert
                   v-if="order.customer.restriction"
-                  class="mt-5"
+                  class="mt-4"
                   :variants="item.hasRestrictionConflict ? 'danger' : 'success'"
                   :title="item.hasRestrictionConflict ? 'Revisão necessária' : 'Restrição alimentar verificada'"
                   :description="item.hasRestrictionConflict ? `${order.customer.name} possui restrição a ${order.customer.restriction.toLocaleLowerCase('pt-BR')} e este item tem uma incompatibilidade.` : `Composição verificada para a restrição a ${order.customer.restriction.toLocaleLowerCase('pt-BR')}: sem incompatibilidades.`">
                   <template #icon><TriangleAlertIcon v-if="item.hasRestrictionConflict" /><CheckIcon v-else /></template>
                 </Alert>
-              </Card>
+              </article>
             </div>
-          </section>
+          </Card>
+
+          <Card>
+            <template #header><h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500">Financeiro</h2></template>
+            <div class="grid gap-5 sm:grid-cols-3">
+              <div>
+                <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Condição de pagamento</p>
+                <p class="mt-1 font-medium text-slate-800">{{ paymentConditionLabel }}</p>
+              </div>
+              <div>
+                <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Forma de pagamento</p>
+                <p class="mt-1 font-medium text-slate-800">{{ paymentMethodLabel }}</p>
+              </div>
+              <div v-if="paymentDueDateLabel">
+                <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Vencimento</p>
+                <p class="mt-1 font-medium text-slate-800">{{ paymentDueDateLabel }}</p>
+              </div>
+            </div>
+
+            <dl class="mt-5 grid gap-y-3 border-t border-slate-100 pt-4 sm:grid-cols-2 sm:gap-x-10">
+              <div class="flex justify-between gap-4"><dt>Subtotal</dt><dd class="font-medium text-slate-800">{{ formatCurrency(subtotal) }}</dd></div>
+              <div class="flex justify-between gap-4"><dt>Taxa de entrega</dt><dd class="font-medium text-slate-800">{{ formatCurrency(order.deliveryFee) }}</dd></div>
+              <div v-if="order.planCreditValue" class="flex justify-between gap-4"><dt>Crédito de plano</dt><dd class="font-medium text-emerald-700">− {{ formatCurrency(order.planCreditValue) }}</dd></div>
+              <div v-if="order.financialCreditValue" class="flex justify-between gap-4"><dt>Crédito financeiro</dt><dd class="font-medium text-emerald-700">− {{ formatCurrency(order.financialCreditValue) }}</dd></div>
+              <div v-if="order.discountValue" class="flex justify-between gap-4"><dt>Desconto manual</dt><dd class="font-medium text-emerald-700">− {{ formatCurrency(order.discountValue) }}</dd></div>
+              <div class="flex justify-between gap-4 font-semibold text-slate-900"><dt>Total financeiro</dt><dd>{{ formatCurrency(total) }}</dd></div>
+            </dl>
+
+            <div v-if="order.discountReason" class="mt-4 rounded-lg bg-slate-50 p-3">
+              <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Motivo do desconto</p>
+              <p class="mt-1 text-slate-700">{{ order.discountReason }}</p>
+            </div>
+          </Card>
 
           <Card v-if="order.note">
             <template #header><h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500">Observação</h2></template>
             <div
-              class="space-y-1 whitespace-pre-line text-slate-700 [&_a]:text-blue-600 [&_a]:underline [&_blockquote]:border-l-3 [&_blockquote]:border-slate-300 [&_blockquote]:pl-3 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-6 [&_ul]:list-disc [&_ul]:pl-6"
+              class="space-y-2 whitespace-pre-line text-slate-700 [&_a]:text-blue-600 [&_a]:underline [&_blockquote]:border-l-3 [&_blockquote]:border-slate-300 [&_blockquote]:pl-3 [&_em]:italic [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-6 [&_s]:line-through [&_strong]:font-semibold [&_u]:underline [&_ul]:list-disc [&_ul]:pl-6"
               v-html="sanitizedOrderNote" />
           </Card>
         </div>
@@ -568,7 +626,7 @@ onBeforeUnmount(() => {
       <Drawer
         :open="confirmationOpen"
         side="right"
-        size="medium"
+        size="large"
         :title="`Confirmar pedido #${order.id}`"
         description="Confira os efeitos desta confirmação."
         @update:open="confirmationOpen = $event">
@@ -579,9 +637,13 @@ onBeforeUnmount(() => {
             <p class="text-slate-400">Entrega</p><p class="font-medium text-slate-800">{{ order.deliveryWindow ?? 'Não definida' }}</p>
             <p class="text-slate-400">Itens</p><p class="font-medium text-slate-800">{{ itemCount }}</p>
           </div>
-          <div v-if="validating" class="rounded-lg border border-slate-200 bg-slate-50 p-4" role="status">
+          <div v-if="validating" class="space-y-3" role="status">
             <p class="font-medium text-slate-700">Verificando pedido...</p>
-            <div class="mt-3 h-1.5 animate-pulse rounded-full bg-slate-200"></div>
+            <Progress
+              :value="validationProgress"
+              variant="info"
+              size="small"
+              label="Verificando pedido" />
           </div>
           <template v-else-if="validationComplete">
             <Alert
@@ -603,8 +665,7 @@ onBeforeUnmount(() => {
           </template>
         </div>
         <template #footer="{ close }">
-          <div class="flex items-center justify-between gap-3">
-            <Button type="button" variant="secondary" @click="closeConfirmation(close)">Voltar</Button>
+          <div class="flex justify-end">
             <Button type="button" :disabled="!canConfirm" :loading="confirming" @click="confirmOrder(close)">Confirmar pedido</Button>
           </div>
         </template>
@@ -613,7 +674,7 @@ onBeforeUnmount(() => {
       <Drawer
         :open="cancellationOpen"
         side="right"
-        size="medium"
+        size="large"
         :title="`Cancelar pedido #${order.id}`"
         :description="`${order.customer.name} · ${itemCount} ${itemCount === 1 ? 'item' : 'itens'} · Entrega ${order.deliveryWindow ?? 'não definida'}`"
         @update:open="cancellationOpen = $event">
@@ -660,8 +721,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <template #footer="{ close }">
-          <div class="flex items-center justify-between gap-3">
-            <Button type="button" variant="secondary" @click="close">Voltar</Button>
+          <div class="flex justify-end">
             <Button type="button" variant="danger" :loading="cancelling" @click="cancelOrder(close)">
               {{ cancelling ? 'Cancelando...' : 'Cancelar pedido' }}
             </Button>
@@ -672,7 +732,7 @@ onBeforeUnmount(() => {
       <Drawer
         :open="rescheduleOpen"
         side="right"
-        size="medium"
+        size="large"
         title="Reagendar entrega"
         :description="`Pedido #${order.id} · ${order.customer.name}`"
         @update:open="rescheduleOpen = $event">
@@ -698,8 +758,7 @@ onBeforeUnmount(() => {
           <Textarea v-model="rescheduleNote" label="Observação" placeholder="Informação útil para a nova tentativa" :rows="3" />
         </div>
         <template #footer="{ close }">
-          <div class="flex items-center justify-between gap-3">
-            <Button type="button" variant="secondary" @click="close">Voltar</Button>
+          <div class="flex justify-end">
             <Button type="button" :loading="rescheduling" @click="rescheduleOrder(close)">
               {{ rescheduling ? 'Reagendando...' : 'Reagendar' }}
             </Button>

@@ -9,6 +9,7 @@ import {
   Textarea
 } from '@thiagoschoeffel/ts-components'
 import type { DateValue } from '@thiagoschoeffel/ts-components'
+import { parseDate } from '@internationalized/date'
 import CustomerSection from '../components/new-order/CustomerSection.vue'
 import DeliverySection from '../components/new-order/DeliverySection.vue'
 import FinancialSection from '../components/new-order/FinancialSection.vue'
@@ -189,6 +190,9 @@ function saveOrder() {
     deliveryFee: deliveryFee.value,
     items: structuredClone(items.value),
     note: note.value.trim() || undefined,
+    paymentCondition: paymentCondition.value,
+    paymentMethod: paymentMethod.value,
+    paymentDueDate: paymentDueDateIso.value,
     planCreditCount: usePlanCredit.value ? planCreditAllocation.value.count : 0,
     planCreditValue: appliedPlanCredit.value,
     financialCreditValue: appliedFinancialCredit.value,
@@ -237,6 +241,9 @@ onMounted(async () => {
   address.value = existingOrder.deliveryAddress ? { ...existingOrder.deliveryAddress } : undefined
   deliveryWindow.value = existingOrder.deliveryWindow
   items.value = structuredClone(existingOrder.items)
+  paymentCondition.value = existingOrder.paymentCondition
+  paymentMethod.value = existingOrder.paymentMethod
+  paymentDueDate.value = existingOrder.paymentDueDate ? parseDate(existingOrder.paymentDueDate) : undefined
   deliveryFee.value = existingOrder.deliveryFee
   discount.value = existingOrder.discountValue
   discountReason.value = existingOrder.discountReason ?? ''

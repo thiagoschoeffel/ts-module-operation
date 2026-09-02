@@ -12,7 +12,6 @@ import {
   EmptyState,
   InfoIcon,
   RadioGroup,
-  ScrollArea,
   TriangleAlertIcon
 } from '@thiagoschoeffel/ts-components'
 import { formatCurrency, offers, riceSubstitutionOptions } from './mockData'
@@ -245,8 +244,7 @@ function handleDrawerOpen(open: boolean) {
           </Button>
         </template>
 
-        <ScrollArea class="-mr-5 h-full w-[calc(100%+1.25rem)]" scrollbar-visibility="auto">
-          <div class="pr-5">
+        <div>
             <div v-if="drawerView === 'offers'" class="space-y-3">
               <Alert v-if="feedback" variants="success" :description="feedback">
                 <template #icon><CheckIcon /></template>
@@ -336,8 +334,7 @@ function handleDrawerOpen(open: boolean) {
                 </div>
               </div>
             </div>
-          </div>
-        </ScrollArea>
+        </div>
 
         <template v-if="drawerView !== 'offers'" #footer>
           <div class="flex items-center justify-between gap-4">
