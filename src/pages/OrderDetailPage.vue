@@ -418,7 +418,7 @@ onBeforeUnmount(() => {
                 <div><p class="text-xs font-medium uppercase tracking-wide text-slate-400">Tentativa</p><p class="mt-1 font-medium text-slate-800">{{ attempt.occurredAt }}</p></div>
                 <div><p class="text-xs font-medium uppercase tracking-wide text-slate-400">Motivo</p><p class="mt-1 font-medium text-red-700">{{ attempt.reason }}</p></div>
                 <div><p class="text-xs font-medium uppercase tracking-wide text-slate-400">Entregador</p><p class="mt-1 text-slate-700">{{ attempt.driver }}</p></div>
-                <div v-if="attempt.note"><p class="text-xs font-medium uppercase tracking-wide text-slate-400">Observação</p><p class="mt-1 text-slate-700">{{ attempt.note }}</p></div>
+                <div v-if="attempt.note"><p class="text-xs font-medium uppercase tracking-wide text-slate-400">Observação</p><div class="mt-1 space-y-2 whitespace-pre-line text-slate-700 [&_a]:text-blue-600 [&_a]:underline [&_blockquote]:border-l-3 [&_blockquote]:border-slate-300 [&_blockquote]:pl-3 [&_em]:italic [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-6 [&_s]:line-through [&_strong]:font-semibold [&_u]:underline [&_ul]:list-disc [&_ul]:pl-6" v-html="sanitizeRichText(attempt.note)" /></div>
               </div>
             </div>
           </Card>
@@ -755,7 +755,7 @@ onBeforeUnmount(() => {
             :rows="2"
             :error="rescheduleSubmitted && !rescheduleReason.trim() ? 'Informe o motivo do reagendamento.' : undefined"
             required />
-          <Textarea v-model="rescheduleNote" label="Observação" placeholder="Informação útil para a nova tentativa" :rows="3" />
+          <Textarea v-model="rescheduleNote" label="Observação" rich-text placeholder="Informação útil para a nova tentativa" :rows="3" />
         </div>
         <template #footer="{ close }">
           <div class="flex justify-end">
