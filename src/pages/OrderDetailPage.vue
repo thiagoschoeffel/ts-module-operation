@@ -9,6 +9,7 @@ import {
   ChevronLeftIcon,
   Drawer,
   PackageCheckIcon,
+  sanitizeRichText,
   Select,
   Textarea,
   TriangleAlertIcon
@@ -66,6 +67,7 @@ const total = computed(() => Math.max(0,
 ))
 const hasBlockingRestriction = computed(() => order.value?.items.some(item => item.hasRestrictionConflict) ?? false)
 const itemCount = computed(() => order.value?.items.length ?? 0)
+const sanitizedOrderNote = computed(() => sanitizeRichText(order.value?.note ?? ''))
 const operationalIssues = computed(() => {
   if (!order.value)
     return []
@@ -510,7 +512,9 @@ onBeforeUnmount(() => {
 
           <Card v-if="order.note">
             <template #header><h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500">Observação</h2></template>
-            <p class="whitespace-pre-line text-slate-700">{{ order.note }}</p>
+            <div
+              class="space-y-1 whitespace-pre-line text-slate-700 [&_a]:text-blue-600 [&_a]:underline [&_blockquote]:border-l-3 [&_blockquote]:border-slate-300 [&_blockquote]:pl-3 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-6 [&_ul]:list-disc [&_ul]:pl-6"
+              v-html="sanitizedOrderNote" />
           </Card>
         </div>
 

@@ -3,15 +3,16 @@ import { computed, ref } from 'vue'
 import {
   Alert,
   Button,
+  Card,
   CheckIcon,
   Checkbox,
   ChevronLeftIcon,
   ClipboardListIcon,
   Drawer,
   EmptyState,
-  PlusIcon,
+  InfoIcon,
   RadioGroup,
-  SectionCard,
+  ScrollArea,
   TriangleAlertIcon
 } from '@thiagoschoeffel/ts-components'
 import { formatCurrency, offers, riceSubstitutionOptions } from './mockData'
@@ -137,7 +138,7 @@ function saveConfiguredItem() {
 
 function editItem(item: OrderItem) {
   const offer = offers.find((current) => current.id === item.offerId)
-  if (!offer)
+  if (!offer?.requiresConfiguration)
     return
   selectedOffer.value = offer
   editingItemId.value = item.id
@@ -153,6 +154,10 @@ function editItem(item: OrderItem) {
   personalizationOpen.value = item.customizations.length > 0
   drawerView.value = 'configuration'
   drawerOpen.value = true
+}
+
+function isConfigurableItem(item: OrderItem) {
+  return offers.some(offer => offer.id === item.offerId && offer.requiresConfiguration)
 }
 
 function removeItem(itemId: string) {
@@ -171,13 +176,20 @@ function handleDrawerOpen(open: boolean) {
 </script>
 
 <template>
-  <SectionCard
-    title="Itens do pedido"
-    :disabled="!props.customer"
-    :description="props.customer ? 'Adicione as ofertas disponíveis no cardápio de hoje.' : 'Selecione um cliente para adicionar itens.'">
+  <Card
+    :aria-disabled="!props.customer || undefined"
+    :inert="!props.customer || undefined"
+    :class="!props.customer ? 'bg-slate-50 opacity-60' : ''">
+    <template #header>
+      <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Itens do pedido</h2>
+      <p class="mt-1 text-sm text-slate-500">
+        {{ props.customer ? 'Adicione as ofertas disponíveis no cardápio de hoje.' : 'Selecione um cliente para adicionar itens.' }}
+      </p>
+    </template>
     <div v-if="props.customer" class="space-y-3">
       <EmptyState
         v-if="props.modelValue.length === 0"
+        :bordered="false"
         title="Nenhum item adicionado"
         description="Escolha uma oferta do cardápio de hoje.">
         <template #icon><ClipboardListIcon /></template>
@@ -209,12 +221,12 @@ function handleDrawerOpen(open: boolean) {
         </p>
         <div class="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-3">
           <template v-if="removeConfirmationId === item.id">
-            <span class="mr-auto self-center text-xs font-medium text-slate-600">Remover item?</span>
+            <span class="self-center text-xs font-medium text-slate-600">Remover item?</span>
             <Button type="button" variant="secondary" size="small" @click="removeConfirmationId = undefined">Cancelar</Button>
-            <Button type="button" variant="danger" size="small" @click="removeItem(item.id)">Remover</Button>
+            <Button type="button" variant="danger" size="small" @click="removeItem(item.id)">Sim</Button>
           </template>
           <template v-else>
-            <Button type="button" variant="secondary" size="small" @click="editItem(item)">Editar</Button>
+            <Button v-if="isConfigurableItem(item)" type="button" variant="secondary" size="small" @click="editItem(item)">Editar</Button>
             <Button type="button" variant="danger" size="small" @click="removeConfirmationId = item.id">Remover</Button>
           </template>
         </div>
@@ -228,95 +240,107 @@ function handleDrawerOpen(open: boolean) {
         :description="drawerView === 'offers' ? 'Ofertas disponíveis hoje' : selectedOffer?.name"
         @update:open="handleDrawerOpen">
         <template #trigger>
-          <Button type="button" :variant="props.modelValue.length ? 'secondary' : 'primary'">
-            <template #icon><PlusIcon /></template>
-            {{ props.modelValue.length ? 'Adicionar outro item' : 'Adicionar item' }}
+          <Button type="button" size="small" variant="primary">
+            Adicionar item
           </Button>
         </template>
 
-        <div v-if="drawerView === 'offers'" class="space-y-3">
-          <Alert v-if="feedback" variants="success" :description="feedback">
-            <template #icon><CheckIcon /></template>
-          </Alert>
-          <article v-for="offer in offers" :key="offer.id" class="rounded-lg border border-slate-200 p-4">
-            <div class="flex items-start justify-between gap-4">
-              <div>
-                <h3 class="font-semibold text-slate-800">{{ offer.name }}</h3>
-                <p class="mt-1 text-xs text-slate-500">{{ offer.description }}</p>
+        <ScrollArea class="-mr-5 h-full w-[calc(100%+1.25rem)]" scrollbar-visibility="auto">
+          <div class="pr-5">
+            <div v-if="drawerView === 'offers'" class="space-y-3">
+              <Alert v-if="feedback" variants="success" :description="feedback">
+                <template #icon><CheckIcon /></template>
+              </Alert>
+              <article v-for="offer in offers" :key="offer.id" class="rounded-lg border border-slate-200 p-4">
+                <div class="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 class="font-semibold text-slate-800">{{ offer.name }}</h3>
+                    <p class="mt-1 text-xs text-slate-500">{{ offer.description }}</p>
+                  </div>
+                  <p class="shrink-0 font-semibold text-slate-800">{{ formatCurrency(offer.price) }}</p>
+                </div>
+                <Button
+                  class="mt-4"
+                  type="button"
+                  :variant="offer.requiresConfiguration ? 'primary' : 'secondary'"
+                  size="small"
+                  @click="offer.requiresConfiguration ? configureOffer(offer) : addSimpleOffer(offer)">
+                  {{ offer.requiresConfiguration ? 'Configurar' : 'Adicionar' }}
+                </Button>
+              </article>
+            </div>
+
+            <div v-else-if="selectedOffer" class="space-y-6 pt-2">
+              <button
+                type="button"
+                class="inline-flex cursor-pointer items-center gap-1 text-sm font-medium text-slate-400 transition-colors hover:text-slate-800"
+                @click="drawerView = 'offers'">
+                <ChevronLeftIcon class="size-4" /> Voltar para ofertas
+              </button>
+              <div class="flex items-baseline justify-between gap-4">
+                <h3 class="text-lg font-semibold text-slate-900">{{ selectedOffer.name }}</h3>
+                <p class="font-semibold text-slate-900">{{ formatCurrency(selectedOffer.price) }}</p>
               </div>
-              <p class="shrink-0 font-semibold text-slate-800">{{ formatCurrency(offer.price) }}</p>
-            </div>
-            <Button class="mt-4" type="button" variant="secondary" size="small" @click="offer.requiresConfiguration ? configureOffer(offer) : addSimpleOffer(offer)">
-              {{ offer.requiresConfiguration ? 'Configurar' : 'Adicionar' }}
-            </Button>
-          </article>
-        </div>
 
-        <div v-else-if="selectedOffer" class="space-y-6">
-          <button type="button" class="inline-flex items-center gap-1 text-sm font-medium text-slate-400 hover:text-slate-800" @click="drawerView = 'offers'">
-            <ChevronLeftIcon class="size-4" /> Ofertas
-          </button>
-          <div class="flex items-start justify-between gap-4">
-            <h3 class="text-lg font-semibold text-slate-900">{{ selectedOffer.name }}</h3>
-            <p class="font-semibold text-slate-900">{{ formatCurrency(selectedOffer.price) }}</p>
-          </div>
+              <Alert
+                v-if="hasRestrictionConflict"
+                variants="warning"
+                title="Restrição alimentar"
+                :description="`${props.customer.name} possui restrição a lactose. Estrogonofe contém ingrediente marcado com lactose.`">
+                <template #icon><TriangleAlertIcon /></template>
+                <template #actions>
+                  <Button type="button" variant="secondary" size="small" @click="selectedDish = 'low-carb'">Escolher Low Carb</Button>
+                </template>
+              </Alert>
 
-          <RadioGroup v-model="selectedDish" label="Prato" :options="dishOptions" />
-          <RadioGroup
-            v-if="selectedOffer.id === 'fruit' || selectedOffer.id === 'complete'"
-            v-model="selectedFruit"
-            label="Fruta"
-            :options="fruitOptions" />
-          <div v-if="selectedOffer.id === 'complete'">
-            <p class="text-sm font-medium text-slate-700">Salada</p>
-            <p class="mt-2 text-sm text-slate-600">Salada de folhas</p>
-            <p class="mt-1 text-xs text-slate-400">Selecionada automaticamente por ser a única opção disponível.</p>
-          </div>
-
-          <Alert
-            v-if="hasRestrictionConflict"
-            variants="warning"
-            title="Restrição alimentar"
-            :description="`${props.customer.name} possui restrição a lactose. Estrogonofe contém ingrediente marcado com lactose.`">
-            <template #icon><TriangleAlertIcon /></template>
-            <template #actions>
-              <Button type="button" variant="secondary" size="small" @click="selectedDish = 'low-carb'">Escolher Low Carb</Button>
-            </template>
-          </Alert>
-
-          <Alert
-            v-if="props.customer.preference"
-            variants="success"
-            title="Preferência do cliente"
-            :description="`${props.customer.preference} aplicada`">
-            <template #icon><CheckIcon /></template>
-          </Alert>
-
-          <div class="flex flex-wrap gap-x-4 gap-y-3">
-            <p class="w-full text-sm font-medium text-slate-700">Adicionais</p>
-            <Checkbox v-model="proteinExtra" label="Proteína extra" description="+ R$ 5,00" />
-            <Checkbox v-model="sauceExtra" label="Molho extra" description="+ R$ 2,00" />
-          </div>
-
-          <div>
-            <Button type="button" variant="secondary" size="small" @click="personalizationOpen = !personalizationOpen">Personalizar</Button>
-            <div v-if="personalizationOpen" class="mt-4 rounded-lg border border-slate-200 p-4">
-              <RadioGroup v-model="riceChoice" label="Arroz" :options="riceOptions" />
+              <RadioGroup v-model="selectedDish" label="Prato" :options="dishOptions" />
               <RadioGroup
-                v-if="riceChoice === 'replace'"
-                v-model="riceSubstitution"
-                class="mt-4 border-t border-slate-200 pt-4"
-                label="Substituir por"
-                :options="riceSubstitutionOptions" />
+                v-if="selectedOffer.id === 'fruit' || selectedOffer.id === 'complete'"
+                v-model="selectedFruit"
+                label="Fruta"
+                :options="fruitOptions" />
+              <div v-if="selectedOffer.id === 'complete'">
+                <p class="mb-2 text-sm font-medium text-slate-700">Salada</p>
+                <Alert
+                  variants="info"
+                  title="Salada de folhas"
+                  description="Selecionada automaticamente por ser a única opção disponível.">
+                  <template #icon><InfoIcon /></template>
+                </Alert>
+              </div>
+
+              <div class="flex flex-col items-start gap-3">
+                <p class="text-sm font-medium text-slate-700">Adicionais</p>
+                <Checkbox v-model="proteinExtra" label="Proteína extra" description="+ R$ 5,00" />
+                <Checkbox v-model="sauceExtra" label="Molho extra" description="+ R$ 2,00" />
+              </div>
+
+              <Alert
+                v-if="props.customer.preference"
+                variants="success"
+                title="Preferência do cliente"
+                :description="`${props.customer.preference} aplicada`">
+                <template #icon><CheckIcon /></template>
+              </Alert>
+
+              <div>
+                <Button type="button" variant="secondary" size="small" @click="personalizationOpen = !personalizationOpen">Personalizar</Button>
+                <div v-if="personalizationOpen" class="mt-4 rounded-lg border border-slate-200 p-4">
+                  <RadioGroup v-model="riceChoice" label="Arroz" :options="riceOptions" />
+                  <RadioGroup
+                    v-if="riceChoice === 'replace'"
+                    v-model="riceSubstitution"
+                    class="mt-4 border-t border-slate-200 pt-4"
+                    label="Substituir por"
+                    :options="riceSubstitutionOptions" />
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+        </ScrollArea>
 
-        <template #footer="{ close }">
-          <div v-if="drawerView === 'offers'" class="flex justify-end">
-            <Button type="button" variant="secondary" @click="close">Fechar</Button>
-          </div>
-          <div v-else class="flex items-center justify-between gap-4">
+        <template v-if="drawerView !== 'offers'" #footer>
+          <div class="flex items-center justify-between gap-4">
             <div>
               <p class="text-xs text-slate-500">Total do item</p>
               <p class="font-semibold text-slate-900">{{ formatCurrency(itemTotal) }}</p>
@@ -328,5 +352,5 @@ function handleDrawerOpen(open: boolean) {
         </template>
       </Drawer>
     </div>
-  </SectionCard>
+  </Card>
 </template>

@@ -4,8 +4,8 @@ import {
   Alert,
   AlertDialog,
   Button,
+  Card,
   CheckIcon,
-  SectionCard,
   Textarea
 } from '@thiagoschoeffel/ts-components'
 import type { DateValue } from '@thiagoschoeffel/ts-components'
@@ -14,7 +14,7 @@ import DeliverySection from '../components/new-order/DeliverySection.vue'
 import FinancialSection from '../components/new-order/FinancialSection.vue'
 import OrderItemsSection from '../components/new-order/OrderItemsSection.vue'
 import OrderSummary from '../components/new-order/OrderSummary.vue'
-import { customers, formatCurrency, offers, paymentConditionOptions, paymentMethodOptions } from '../components/new-order/mockData'
+import { customers, formatCurrency, getDefaultDeliveryWindow, offers, paymentConditionOptions, paymentMethodOptions } from '../components/new-order/mockData'
 import type { Customer, CustomerAddress, OrderItem, PaymentCondition, PaymentMethod } from '../components/new-order/types'
 import { getOrderDetail, getOrderDomainState, nextOrderId, saveOrderDetail, type OrderDetail } from '../mocks/orderDetail'
 
@@ -44,7 +44,6 @@ const saving = ref(false)
 const showValidation = ref(false)
 const savedMessage = ref('')
 const initialEditSnapshot = ref('')
-const hydratingEdit = ref(false)
 let navigationTimeout: ReturnType<typeof setTimeout> | undefined
 
 const editorSnapshot = computed(() => JSON.stringify({
@@ -106,21 +105,16 @@ const paymentDueDateIso = computed(() => paymentDueDate.value?.toString())
 
 watch(() => customer.value?.id, () => {
   address.value = customer.value?.addresses.length === 1 ? { ...customer.value.addresses[0] } : undefined
-  deliveryWindow.value = undefined
+  deliveryWindow.value = customer.value ? getDefaultDeliveryWindow() : undefined
   items.value = []
   paymentCondition.value = customer.value?.paymentPreference?.condition ?? 'cash'
   paymentMethod.value = customer.value?.paymentPreference?.method ?? 'pix'
   paymentDueDate.value = undefined
+  deliveryFee.value = 0
   discount.value = 0
   discountReason.value = ''
   usePlanCredit.value = true
   useFinancialCredit.value = false
-})
-
-watch(() => address.value?.id, () => {
-  if (hydratingEdit.value)
-    return
-  deliveryFee.value = address.value ? 4 : 0
 })
 
 watch(paymentCondition, condition => {
@@ -235,7 +229,6 @@ onMounted(async () => {
     return
   }
 
-  hydratingEdit.value = true
   customer.value = customers.find(current => current.id === existingOrder.customer.id) ?? {
     ...existingOrder.customer,
     addresses: existingOrder.deliveryAddress ? [{ ...existingOrder.deliveryAddress }] : []
@@ -251,7 +244,6 @@ onMounted(async () => {
   useFinancialCredit.value = existingOrder.financialCreditValue > 0
   note.value = existingOrder.note ?? ''
   await nextTick()
-  hydratingEdit.value = false
   initialEditSnapshot.value = editorSnapshot.value
 })
 onBeforeUnmount(() => {
@@ -302,14 +294,19 @@ onBeforeUnmount(() => {
           @update:use-plan-credit="usePlanCredit = $event"
           @update:use-financial-credit="useFinancialCredit = $event" />
 
-        <SectionCard title="Observação" description="Inclua uma orientação geral para este pedido, se necessário.">
+        <Card>
+          <template #header>
+            <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Observação</h2>
+            <p class="mt-1 text-sm text-slate-500">Inclua uma orientação geral para este pedido, se necessário.</p>
+          </template>
           <Textarea
             id="order-note"
             v-model="note"
             label="Observação do pedido"
+            rich-text
             :rows="4"
             placeholder="Ex.: Entregar na portaria..." />
-        </SectionCard>
+        </Card>
       </div>
 
       <aside class="min-w-0 lg:sticky lg:top-20">

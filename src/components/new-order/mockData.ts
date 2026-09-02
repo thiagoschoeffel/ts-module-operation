@@ -126,6 +126,20 @@ export const deliveryWindowOptions = [
   { value: '13:00–14:00', label: '13:00–14:00' }
 ]
 
+/**
+ * Pedidos realizados até 10h15 entram na entrega até 12h. Pedidos feitos
+ * depois desse corte e até 12h entram na faixa com entregas a partir de
+ * 12h30. Depois das 12h, é usada a próxima janela disponível da operação.
+ */
+export function getDefaultDeliveryWindow(date = new Date()) {
+  const orderTimeInMinutes = date.getHours() * 60 + date.getMinutes()
+  if (orderTimeInMinutes <= 10 * 60 + 15)
+    return deliveryWindowOptions[0].value
+  if (orderTimeInMinutes <= 12 * 60)
+    return deliveryWindowOptions[1].value
+  return deliveryWindowOptions[2].value
+}
+
 export const riceSubstitutionOptions = [
   { value: 'vegetables', label: 'Legumes refogados', description: 'Opção disponível no cardápio de hoje' },
   { value: 'salad', label: 'Salada de folhas', description: 'Porção adicional da salada do dia' }

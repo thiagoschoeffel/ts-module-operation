@@ -10,3 +10,14 @@ npm run dev
 
 The application runs at http://localhost:4174. The host loads its
 `remoteEntry.js` from http://localhost:4174/remoteEntry.js.
+
+## Cenários mock da lista de pedidos
+
+Use o parâmetro `mock` na rota `/operacoes/pedidos` para conferir os estados
+vazios da tabela sem alterar a massa de dados:
+
+- `?mock=sem-pedidos`: operação sem pedidos cadastrados.
+- `?mock=sem-resultados`: busca preenchida sem resultados correspondentes.
+- `?mock=erro`: falha simulada no carregamento da lista.
+
+Sem o parâmetro, a tela continua usando a massa completa de pedidos.

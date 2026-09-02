@@ -116,7 +116,7 @@ const paymentDueDateLabel = computed(() => props.paymentDueDate
         <p class="mt-1 text-xs text-slate-500">Recebimento ainda não registrado</p>
       </div>
 
-      <div class="flex items-end justify-between gap-4 border-t border-slate-200 pt-4">
+      <div class="flex items-center justify-between gap-4 border-t border-slate-200 pt-4">
         <span class="text-sm font-medium text-slate-600">Total financeiro</span>
         <span class="text-lg font-semibold text-slate-900">{{ formatCurrency(total) }}</span>
       </div>

@@ -61,7 +61,11 @@ function returnToOrders() {
 </script>
 
 <template>
-  <div class="isolate">
+  <div
+    class="isolate"
+    :class="props.section === 'pedidos' && props.orderPage === 'list'
+      ? 'md:flex md:h-[calc(100dvh-11rem)] md:min-h-0 md:flex-col'
+      : ''">
     <div class="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
       <PageHeader :title="pageTitle" :subtitle="pageSubtitle">
         <template #icon>
@@ -72,7 +76,7 @@ function returnToOrders() {
       <DataSyncStatus v-if="props.section === 'hoje'" status="synced" />
 
       <button
-        v-if="props.section === 'pedidos' && props.orderPage === 'detail'"
+        v-if="props.section === 'pedidos' && props.orderPage !== 'list'"
         type="button"
         class="hidden cursor-pointer items-center gap-1 text-sm font-medium text-slate-400 transition-colors hover:text-slate-800 sm:inline-flex"
         @click="returnToOrders">
@@ -91,7 +95,11 @@ function returnToOrders() {
       </Button>
     </div>
 
-    <main class="mt-4">
+    <main
+      class="mt-6"
+      :class="props.section === 'pedidos' && props.orderPage === 'list'
+        ? 'md:min-h-0 md:flex-1'
+        : ''">
       <TodayPage v-if="props.section === 'hoje'" />
       <OrderListPage v-else-if="props.section === 'pedidos' && props.orderPage === 'list'" />
       <NewOrderPage

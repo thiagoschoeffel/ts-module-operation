@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Checkbox, DatePicker, Input, SectionCard, Select } from '@thiagoschoeffel/ts-components'
+import { Card, Checkbox, DatePicker, Input, Select } from '@thiagoschoeffel/ts-components'
 import type { DateValue } from '@thiagoschoeffel/ts-components'
 import { formatCurrency, paymentConditionOptions, paymentMethodOptions } from './mockData'
 import type { PaymentCondition, PaymentMethod } from './types'
@@ -44,12 +44,18 @@ function normalizeAmount(value: string | number) {
 </script>
 
 <template>
-  <SectionCard
-    title="Financeiro"
-    :disabled="!props.enabled"
-    :description="props.enabled
-      ? 'Defina as condições financeiras deste pedido aberto.'
-      : 'Adicione pelo menos um item para configurar cobrança e créditos.'">
+  <Card
+    :aria-disabled="!props.enabled || undefined"
+    :inert="!props.enabled || undefined"
+    :class="!props.enabled ? 'bg-slate-50 opacity-60' : ''">
+    <template #header>
+      <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Financeiro</h2>
+      <p class="mt-1 text-sm text-slate-500">
+        {{ props.enabled
+          ? 'Defina as condições financeiras deste pedido aberto.'
+          : 'Adicione pelo menos um item para configurar cobrança e créditos.' }}
+      </p>
+    </template>
     <div v-if="props.enabled" class="space-y-5">
       <div class="grid gap-4 sm:grid-cols-2">
         <Select
@@ -130,5 +136,5 @@ function normalizeAmount(value: string | number) {
         Estes dados permanecem provisórios enquanto o pedido estiver aberto. Cobrança, créditos e valores serão consolidados somente na confirmação; o pagamento recebido é registrado separadamente.
       </p>
     </div>
-  </SectionCard>
+  </Card>
 </template>

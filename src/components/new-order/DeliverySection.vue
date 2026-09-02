@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Button, Drawer, EmptyState, HomeIcon, Input, PlusIcon, ScrollArea, SectionCard, Select } from '@thiagoschoeffel/ts-components'
+import { Button, Card, Drawer, EmptyState, HomeIcon, Input, PlusIcon, RadioGroup, ScrollArea, Select } from '@thiagoschoeffel/ts-components'
 import { formatAddressLocation, formatAddressStreet } from './address'
 import { deliveryWindowOptions } from './mockData'
 import type { Customer, CustomerAddress } from './types'
@@ -40,6 +40,39 @@ watch(() => props.customer?.id, () => {
 function chooseAddress(address: CustomerAddress) {
   emit('update:address', { ...address })
   addressDrawerOpen.value = false
+}
+
+function isSelectedAddress(address: CustomerAddress) {
+  const selectedAddress = props.address
+  if (!selectedAddress)
+    return false
+  if (selectedAddress.id === address.id)
+    return true
+
+  return selectedAddress.postalCode === address.postalCode
+    && selectedAddress.street === address.street
+    && selectedAddress.number === address.number
+    && selectedAddress.complement === address.complement
+    && selectedAddress.neighborhood === address.neighborhood
+    && selectedAddress.city === address.city
+    && selectedAddress.state === address.state
+}
+
+const selectedAddressId = computed(() =>
+  addresses.value.find(isSelectedAddress)?.id
+)
+const addressOptions = computed(() =>
+  addresses.value.map(address => ({
+    value: address.id,
+    label: address.label,
+    description: `${formatAddressStreet(address)} · ${formatAddressLocation(address)}`
+  }))
+)
+
+function chooseAddressById(addressId: string) {
+  const address = addresses.value.find(current => current.id === addressId)
+  if (address)
+    chooseAddress(address)
 }
 
 const canAddAddress = computed(() => Boolean(
@@ -91,23 +124,31 @@ function addAddress() {
 </script>
 
 <template>
-  <SectionCard
-    title="Entrega"
-    :disabled="!props.customer"
-    :description="props.customer ? 'Defina onde e quando o pedido será entregue.' : 'Selecione um cliente para configurar a entrega.'">
+  <Card
+    :aria-disabled="!props.customer || undefined"
+    :inert="!props.customer || undefined"
+    :class="!props.customer ? 'bg-slate-50 opacity-60' : ''">
+    <template #header>
+      <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Entrega</h2>
+      <p class="mt-1 text-sm text-slate-500">
+        {{ props.customer ? 'Defina onde e quando o pedido será entregue.' : 'Selecione um cliente para configurar a entrega.' }}
+      </p>
+    </template>
     <div v-if="props.customer" class="grid gap-5 sm:grid-cols-2">
       <div>
         <p class="text-sm font-medium text-slate-700">Endereço de entrega</p>
-        <div v-if="props.address" class="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <p class="text-sm font-medium text-slate-800">{{ formatAddressStreet(props.address) }}</p>
-          <p class="mt-1 text-xs text-slate-500">{{ formatAddressLocation(props.address) }}</p>
-        </div>
+        <Card v-if="props.address" class="mt-2 !bg-slate-50 shadow-none [&>div]:p-3">
+          <address class="not-italic">
+            <p class="text-sm font-medium text-slate-800">{{ formatAddressStreet(props.address) }}</p>
+            <p class="mt-1 text-xs text-slate-500">{{ formatAddressLocation(props.address) }}</p>
+          </address>
+        </Card>
         <p v-else class="mt-2 text-sm text-slate-500">Nenhum endereço selecionado.</p>
 
         <Drawer
           v-model:open="addressDrawerOpen"
           side="right"
-          size="small"
+          size="large"
           title="Endereço de entrega"
           description="Escolha um endereço ou cadastre um novo.">
           <template #trigger>
@@ -116,20 +157,15 @@ function addAddress() {
               {{ props.address ? 'Alterar' : addresses.length ? 'Escolher endereço' : 'Adicionar endereço' }}
             </Button>
           </template>
-          <ScrollArea class="h-full" scrollbar-visibility="auto">
-            <div class="space-y-5 pr-3">
+          <ScrollArea class="-mr-5 h-full w-[calc(100%+1.25rem)]" scrollbar-visibility="auto">
+            <div class="space-y-5 pr-5">
               <div v-if="addresses.length" class="space-y-2">
-                <button
-                  v-for="address in addresses"
-                  :key="address.id"
-                  type="button"
-                  class="w-full rounded-lg border p-3 text-left transition-colors hover:bg-slate-50"
-                  :class="props.address?.id === address.id ? 'border-blue-500 bg-blue-50' : 'border-slate-200'"
-                  @click="chooseAddress(address)">
-                  <span class="block text-sm font-medium text-slate-800">{{ address.label }}</span>
-                  <span class="mt-1 block text-xs text-slate-600">{{ formatAddressStreet(address) }}</span>
-                  <span class="mt-1 block text-xs text-slate-500">{{ formatAddressLocation(address) }}</span>
-                </button>
+                <RadioGroup
+                  :model-value="selectedAddressId"
+                  :options="addressOptions"
+                  label="Endereços cadastrados"
+                  name="delivery-address"
+                  @update:model-value="chooseAddressById" />
               </div>
               <EmptyState
                 v-else
@@ -171,7 +207,7 @@ function addAddress() {
             <div class="flex justify-end">
               <Button
                 type="button"
-                variant="secondary"
+                variant="primary"
                 :disabled="!canAddAddress"
                 @click="addAddress">
                 Adicionar e usar
@@ -188,5 +224,5 @@ function addAddress() {
         :options="deliveryWindowOptions"
         @update:model-value="emit('update:deliveryWindow', $event)" />
     </div>
-  </SectionCard>
+  </Card>
 </template>

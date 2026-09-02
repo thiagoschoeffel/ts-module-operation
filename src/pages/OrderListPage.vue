@@ -6,6 +6,7 @@ import {
   Button,
   Card,
   Chips,
+  ClipboardListIcon,
   DataTable,
   Drawer,
   EmptyState,
@@ -26,8 +27,14 @@ import { getOrderSummaries } from '../mocks/orderDetail'
 import type { DeliveryWindow, MockOrder as Order, OrderChannel, OrderStatus } from '../mocks/orders'
 
 type OrderSortKey = 'id' | 'customer' | 'statusLabel' | 'deliveryWindow' | 'total'
+type OrderListMockScenario = 'padrao' | 'sem-pedidos' | 'sem-resultados' | 'erro'
 
 const initialSearchParams = new URLSearchParams(window.location.search)
+const validMockScenarios = new Set<OrderListMockScenario>(['padrao', 'sem-pedidos', 'sem-resultados', 'erro'])
+const initialMockScenario = initialSearchParams.get('mock')
+const mockScenario: OrderListMockScenario = validMockScenarios.has(initialMockScenario as OrderListMockScenario)
+  ? initialMockScenario as OrderListMockScenario
+  : 'padrao'
 const validStatusValues = new Set<OrderStatus | 'todos'>(['todos', 'revisao', 'aberto', 'andamento', 'concluido', 'problema'])
 const validChannels = new Set<OrderChannel>(['WhatsApp', 'Telefone', 'Balcão'])
 const validDeliveryWindows = new Set<DeliveryWindow>(['11:00–12:00', '12:00–13:00', '13:00–14:00'])
@@ -39,7 +46,10 @@ const hasInitialDefaultSort = initialSortKey === 'padrao'
 const initialPage = Number(initialSearchParams.get('pagina'))
 
 const activeStatus = ref(validStatusValues.has(initialStatus as OrderStatus | 'todos') ? initialStatus : 'todos')
-const search = ref(initialSearchParams.get('busca') ?? '')
+const search = ref(
+  initialSearchParams.get('busca')
+    ?? (mockScenario === 'sem-resultados' ? 'Cliente inexistente' : '')
+)
 const debouncedSearch = ref(search.value)
 const filtersOpen = ref(false)
 const currentPage = ref(Number.isInteger(initialPage) && initialPage > 0 ? initialPage : 1)
@@ -93,7 +103,7 @@ const statusTabs: TabItem[] = [
   { value: 'problema', label: 'Problemas' }
 ]
 
-const orders: Order[] = getOrderSummaries()
+const orders: Order[] = mockScenario === 'sem-pedidos' ? [] : getOrderSummaries()
 
 watch(search, (value) => {
   if (searchDebounce)
@@ -117,6 +127,7 @@ function setRowsLoading() {
   isLoading.value = true
   loadingTimeout = setTimeout(() => {
     isLoading.value = false
+    hasLoadingError.value = mockScenario === 'erro'
   }, 300)
 }
 
@@ -331,6 +342,9 @@ const activeFilterCount = computed(() =>
 )
 const hasSearch = computed(() => Boolean(debouncedSearch.value.trim()))
 const hasAdvancedFilters = computed(() => activeFilterCount.value > 0)
+const activeTabLabel = computed(() =>
+  statusTabs.find((tab) => tab.value === activeStatus.value)?.label ?? 'Todos'
+)
 const emptyStateTitle = computed(() => {
   if (hasLoadingError.value)
     return 'Não foi possível carregar os pedidos'
@@ -345,7 +359,11 @@ const emptyStateDescription = computed(() => {
     return 'Nenhum pedido corresponde à busca e aos filtros atuais.'
   if (hasSearch.value)
     return `Não encontramos pedidos para “${debouncedSearch.value.trim()}”.`
-  return 'Nenhum pedido corresponde aos filtros selecionados.'
+  if (hasAdvancedFilters.value)
+    return 'Nenhum pedido corresponde aos filtros selecionados.'
+  if (activeStatus.value !== 'todos')
+    return `Nenhum pedido está na etapa “${activeTabLabel.value}”.`
+  return 'Não há pedidos para exibir nesta lista.'
 })
 
 function selectedLabels(options: MultiSelectOption[], values: string[]) {
@@ -358,10 +376,6 @@ function selectedLabels(options: MultiSelectOption[], values: string[]) {
 
 const selectedChannelLabels = computed(() => selectedLabels(channelOptions, selectedChannels.value))
 const selectedDeliveryWindowLabels = computed(() => selectedLabels(deliveryWindowOptions, selectedDeliveryWindows.value))
-
-const activeTabLabel = computed(() =>
-  statusTabs.find((tab) => tab.value === activeStatus.value)?.label ?? 'Todos'
-)
 
 const statusVariants: Record<OrderStatus, 'neutral' | 'info' | 'success' | 'warning' | 'danger'> = {
   revisao: 'warning',
@@ -400,28 +414,28 @@ function getOrder(row: DataTableRow) {
 </script>
 
 <template>
-  <section aria-label="Lista de pedidos">
-    <Tabs
-      v-model="activeStatus"
-      :tabs="statusTabs"
-      aria-label="Status dos pedidos"
-      size="medium">
-      <template #badge="{ tab }">
-        <Badge
-          size="small"
-          :variant="
-            tab.value === 'revisao' && tabCounts[tab.value] > 0
-              ? 'warning'
-              : tab.value === 'problema' && tabCounts[tab.value] > 0
-                ? 'danger'
-                : 'neutral'
-          ">
-          {{ tabCounts[tab.value] }}
-        </Badge>
-      </template>
+  <section class="md:flex md:h-full md:min-h-0 md:flex-col" aria-label="Lista de pedidos">
+    <Card class="md:shrink-0 [&>div]:p-4">
+      <Tabs
+        v-model="activeStatus"
+        :tabs="statusTabs"
+        aria-label="Status dos pedidos"
+        size="medium">
+        <template #badge="{ tab }">
+          <Badge
+            size="small"
+            :variant="
+              tab.value === 'revisao' && tabCounts[tab.value] > 0
+                ? 'warning'
+                : tab.value === 'problema' && tabCounts[tab.value] > 0
+                  ? 'danger'
+                  : 'neutral'
+            ">
+            {{ tabCounts[tab.value] }}
+          </Badge>
+        </template>
 
-      <template #content>
-        <div class="space-y-4">
+        <template #content>
           <div class="space-y-4">
             <div class="flex flex-wrap items-center gap-4">
               <Input
@@ -503,172 +517,179 @@ function getOrder(row: DataTableRow) {
                 Janela: {{ selectedDeliveryWindowLabels }}
               </Chips>
             </div>
-
-            <p v-if="!hasLoadingError" class="text-sm text-slate-500" aria-live="polite">
-              {{ filteredOrders.length }} pedido{{ filteredOrders.length === 1 ? '' : 's' }} exibido{{ filteredOrders.length === 1 ? '' : 's' }} em {{ activeTabLabel.toLocaleLowerCase('pt-BR') }}
-            </p>
           </div>
+        </template>
+      </Tabs>
+    </Card>
 
-          <div class="space-y-3 md:hidden">
-            <template v-if="isLoading && !hasLoadingError">
-              <div
-                v-for="index in 4"
-                :key="index"
-                class="animate-pulse rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                <div class="h-4 w-28 rounded bg-slate-200"></div>
-                <div class="mt-3 h-4 w-40 rounded bg-slate-200"></div>
-                <div class="mt-2 h-3 w-28 rounded bg-slate-100"></div>
-                <div class="mt-5 h-3 w-32 rounded bg-slate-100"></div>
-              </div>
-            </template>
-
-            <template v-else-if="hasLoadingError || visibleOrders.length === 0">
-              <EmptyState
-                class="bg-white shadow-sm"
-                size="large"
-                :title="emptyStateTitle"
-                :description="emptyStateDescription">
-                <template #icon>
-                  <TriangleAlertIcon v-if="hasLoadingError" />
-                  <SearchIcon v-else />
-                </template>
-                <template #action>
-                  <Button v-if="hasLoadingError" type="button" size="small" @click="retryLoading">Tentar novamente</Button>
-                  <Button v-else-if="orders.length === 0" type="button" size="small" @click="createOrder">Novo pedido</Button>
-                  <Button v-else-if="hasSearch && hasAdvancedFilters" type="button" variant="secondary" size="small" @click="clearSearchAndAdvancedFilters">Limpar busca e filtros</Button>
-                  <Button v-else-if="hasSearch" type="button" variant="secondary" size="small" @click="clearSearch">Limpar busca</Button>
-                  <Button v-else type="button" variant="secondary" size="small" @click="clearAdvancedFilters">Limpar filtros</Button>
-                </template>
-              </EmptyState>
-            </template>
-
-            <template v-else>
-              <Card
-                v-for="order in visibleOrders"
-                :key="order.id">
-              <div class="flex items-start justify-between gap-3">
-                <p class="font-semibold text-slate-800">#{{ order.id }}</p>
-                <Badge :variant="statusVariants[order.status]">{{ order.statusLabel }}</Badge>
-              </div>
-              <p class="mt-3 font-medium text-slate-800">{{ order.customer }}</p>
-              <p class="mt-1 text-sm text-slate-500">
-                {{ order.channel }} · {{ order.itemCount }} {{ order.itemCount === 1 ? 'item' : 'itens' }}
-              </p>
-              <div class="mt-4 flex items-end justify-between gap-3 border-t border-slate-100 pt-3">
-                <p class="text-sm text-slate-500">
-                  Entrega <span class="font-medium text-slate-700">{{ order.deliveryWindow ?? '—' }}</span>
-                </p>
-                <p class="font-semibold text-slate-800">{{ order.total }}</p>
-              </div>
-              <p
-                v-if="order.dietaryRestriction"
-                class="mt-3 flex items-center gap-1 text-xs font-medium text-amber-700">
-                <TriangleAlertIcon class="size-3.5" aria-hidden="true" />
-                Restrição alimentar
-              </p>
-              <template #footer>
-                <a
-                  :href="orderHref(order.id)"
-                  class="-mx-6 -my-4 flex items-center justify-between gap-3 px-6 py-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-800">
-                  <span>{{ orderActions[order.status] }}</span>
-                  <ArrowRightIcon class="size-4 shrink-0" aria-hidden="true" />
-                </a>
-              </template>
-              </Card>
-            </template>
-          </div>
-
-          <DataTable
-            class="hidden h-[min(36rem,calc(100dvh-18rem))] md:block"
-            :columns="tableColumns"
-            :rows="hasLoadingError ? [] : tableRows"
-            :selectable="false"
-            :loading="isLoading && !hasLoadingError"
-            sort-mode="manual"
-            :sort-key="activeSortKey"
-            :sort-direction="activeSortDirection"
-            row-key="id"
-            label="Pedidos filtrados por status, busca, origem e janela de entrega"
-            actions-label="Ação"
-            empty-text="Nenhum pedido encontrado nesta visão."
-            @sort="updateSort">
-            <template #cell-id="{ row }">
-              <p class="font-semibold text-slate-800">#{{ getOrder(row).id }}</p>
-              <p class="mt-1 text-xs text-slate-500">{{ getOrder(row).createdAt }}</p>
-            </template>
-
-            <template #cell-customer="{ row }">
-              <p class="font-medium text-slate-800">{{ getOrder(row).customer }}</p>
-              <p class="mt-1 text-xs text-slate-500">
-                {{ getOrder(row).channel }} · {{ getOrder(row).itemCount }} {{ getOrder(row).itemCount === 1 ? 'item' : 'itens' }}
-              </p>
-              <p v-if="getOrder(row).dietaryRestriction" class="mt-2 flex items-center gap-1 text-xs font-medium text-amber-700">
-                <TriangleAlertIcon class="size-3.5" aria-hidden="true" />
-                Restrição alimentar
-              </p>
-            </template>
-
-            <template #cell-statusLabel="{ row }">
-              <Badge :variant="statusVariants[getOrder(row).status]">{{ getOrder(row).statusLabel }}</Badge>
-            </template>
-
-            <template #cell-deliveryWindow="{ row }">
-              <span class="font-medium text-slate-700">{{ getOrder(row).deliveryWindow ?? '—' }}</span>
-            </template>
-
-            <template #cell-total="{ row }">
-              <span class="font-semibold text-slate-800">{{ getOrder(row).total }}</span>
-            </template>
-
-            <template #actions="{ row }">
-              <Button
-                type="button"
-                variant="secondary"
-                size="small"
-                @click="openOrder(getOrder(row).id)">
-                {{ orderActions[getOrder(row).status] }}
-                <template #trailingIcon>
-                  <ArrowRightIcon />
-                </template>
-              </Button>
-            </template>
-
-            <template #empty>
-              <EmptyState
-                :bordered="false"
-                size="small"
-                :title="emptyStateTitle"
-                :description="emptyStateDescription">
-                <template #icon>
-                  <TriangleAlertIcon v-if="hasLoadingError" />
-                  <SearchIcon v-else />
-                </template>
-                <template #action>
-                  <Button v-if="hasLoadingError" type="button" size="small" @click="retryLoading">Tentar novamente</Button>
-                  <Button v-else-if="orders.length === 0" type="button" size="small" @click="createOrder">Novo pedido</Button>
-                  <Button v-else-if="hasSearch && hasAdvancedFilters" type="button" variant="secondary" size="small" @click="clearSearchAndAdvancedFilters">Limpar busca e filtros</Button>
-                  <Button v-else-if="hasSearch" type="button" variant="secondary" size="small" @click="clearSearch">Limpar busca</Button>
-                  <Button v-else type="button" variant="secondary" size="small" @click="clearAdvancedFilters">Limpar filtros</Button>
-                </template>
-              </EmptyState>
-            </template>
-          </DataTable>
-
+    <Card class="mt-4 md:min-h-0 md:flex-1 [&>div]:flex [&>div]:min-h-0 [&>div]:flex-col [&>div]:p-4">
+      <div class="space-y-3 md:hidden">
+        <template v-if="isLoading && !hasLoadingError">
           <div
-            v-if="!hasLoadingError && filteredOrders.length > itemsPerPage"
-            class="flex flex-wrap items-center justify-between gap-3">
-            <p class="text-sm text-slate-500" aria-live="polite">
-              Mostrando {{ visibleOrdersStart }}–{{ visibleOrdersEnd }} de {{ filteredOrders.length }} pedidos
-            </p>
-            <Pagination
-              v-model="currentPage"
-              :total="filteredOrders.length"
-              :items-per-page="itemsPerPage"
-              size="medium"
-              label="Paginação de pedidos" />
+            v-for="index in 4"
+            :key="index"
+            class="animate-pulse rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <div class="h-4 w-28 rounded bg-slate-200"></div>
+            <div class="mt-3 h-4 w-40 rounded bg-slate-200"></div>
+            <div class="mt-2 h-3 w-28 rounded bg-slate-100"></div>
+            <div class="mt-5 h-3 w-32 rounded bg-slate-100"></div>
           </div>
-        </div>
-      </template>
-    </Tabs>
+        </template>
+
+        <template v-else-if="hasLoadingError || visibleOrders.length === 0">
+          <EmptyState
+            class="bg-white shadow-sm"
+            size="large"
+            :title="emptyStateTitle"
+            :description="emptyStateDescription"
+            :role="hasLoadingError ? 'alert' : 'status'">
+            <template #icon>
+              <TriangleAlertIcon v-if="hasLoadingError" />
+              <ClipboardListIcon v-else-if="orders.length === 0" />
+              <SearchIcon v-else />
+            </template>
+            <template #action>
+              <Button v-if="hasLoadingError" type="button" variant="secondary" size="small" @click="retryLoading">Tentar novamente</Button>
+              <Button v-else-if="orders.length === 0" type="button" variant="secondary" size="small" @click="createOrder">Novo pedido</Button>
+              <Button v-else-if="hasSearch && hasAdvancedFilters" type="button" variant="secondary" size="small" @click="clearSearchAndAdvancedFilters">Limpar busca e filtros</Button>
+              <Button v-else-if="hasSearch" type="button" variant="secondary" size="small" @click="clearSearch">Limpar busca</Button>
+              <Button v-else type="button" variant="secondary" size="small" @click="clearAdvancedFilters">Limpar filtros</Button>
+            </template>
+          </EmptyState>
+        </template>
+
+        <template v-else>
+          <Card
+            v-for="order in visibleOrders"
+            :key="order.id">
+          <div class="flex items-start justify-between gap-3">
+            <p class="font-semibold text-slate-800">#{{ order.id }}</p>
+            <Badge :variant="statusVariants[order.status]">{{ order.statusLabel }}</Badge>
+          </div>
+          <p class="mt-3 font-medium text-slate-800">{{ order.customer }}</p>
+          <p class="mt-1 text-sm text-slate-500">
+            {{ order.channel }} · {{ order.itemCount }} {{ order.itemCount === 1 ? 'item' : 'itens' }}
+          </p>
+          <div class="mt-4 flex items-end justify-between gap-3 border-t border-slate-100 pt-3">
+            <p class="text-sm text-slate-500">
+              Entrega <span class="font-medium text-slate-700">{{ order.deliveryWindow ?? '—' }}</span>
+            </p>
+            <p class="font-semibold text-slate-800">{{ order.total }}</p>
+          </div>
+          <p
+            v-if="order.dietaryRestriction"
+            class="mt-3 flex items-center gap-1 text-xs font-medium text-amber-700">
+            <TriangleAlertIcon class="size-3.5" aria-hidden="true" />
+            Restrição alimentar
+          </p>
+          <template #footer>
+            <a
+              :href="orderHref(order.id)"
+              class="-mx-6 -my-4 flex items-center justify-between gap-3 px-6 py-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-800">
+              <span>{{ orderActions[order.status] }}</span>
+              <ArrowRightIcon class="size-4 shrink-0" aria-hidden="true" />
+            </a>
+          </template>
+          </Card>
+        </template>
+      </div>
+
+      <DataTable
+        :class="[
+          'hidden min-h-0 flex-1 md:flex',
+          !isLoading && (hasLoadingError || visibleOrders.length === 0)
+            ? '[&_table]:h-full [&_tbody>tr>td]:align-middle'
+            : ''
+        ]"
+        :columns="tableColumns"
+        :rows="hasLoadingError ? [] : tableRows"
+        :selectable="false"
+        :loading="isLoading && !hasLoadingError"
+        sort-mode="manual"
+        :sort-key="activeSortKey"
+        :sort-direction="activeSortDirection"
+        row-key="id"
+        label="Pedidos filtrados por status, busca, origem e janela de entrega"
+        actions-label="Ação"
+        empty-text="Nenhum pedido encontrado nesta visão."
+        @sort="updateSort">
+        <template #cell-id="{ row }">
+          <p class="font-semibold text-slate-800">#{{ getOrder(row).id }}</p>
+          <p class="mt-1 text-xs text-slate-500">{{ getOrder(row).createdAt }}</p>
+        </template>
+
+        <template #cell-customer="{ row }">
+          <p class="font-medium text-slate-800">{{ getOrder(row).customer }}</p>
+          <p class="mt-1 text-xs text-slate-500">
+            {{ getOrder(row).channel }} · {{ getOrder(row).itemCount }} {{ getOrder(row).itemCount === 1 ? 'item' : 'itens' }}
+          </p>
+          <p v-if="getOrder(row).dietaryRestriction" class="mt-2 flex items-center gap-1 text-xs font-medium text-amber-700">
+            <TriangleAlertIcon class="size-3.5" aria-hidden="true" />
+            Restrição alimentar
+          </p>
+        </template>
+
+        <template #cell-statusLabel="{ row }">
+          <Badge :variant="statusVariants[getOrder(row).status]">{{ getOrder(row).statusLabel }}</Badge>
+        </template>
+
+        <template #cell-deliveryWindow="{ row }">
+          <span class="font-medium text-slate-700">{{ getOrder(row).deliveryWindow ?? '—' }}</span>
+        </template>
+
+        <template #cell-total="{ row }">
+          <span class="font-semibold text-slate-800">{{ getOrder(row).total }}</span>
+        </template>
+
+        <template #actions="{ row }">
+          <Button
+            type="button"
+            variant="secondary"
+            size="small"
+            @click="openOrder(getOrder(row).id)">
+            {{ orderActions[getOrder(row).status] }}
+            <template #trailingIcon>
+              <ArrowRightIcon />
+            </template>
+          </Button>
+        </template>
+
+        <template #empty>
+          <EmptyState
+            :bordered="false"
+            size="large"
+            :title="emptyStateTitle"
+            :description="emptyStateDescription"
+            :role="hasLoadingError ? 'alert' : 'status'">
+            <template #icon>
+              <TriangleAlertIcon v-if="hasLoadingError" />
+              <ClipboardListIcon v-else-if="orders.length === 0" />
+              <SearchIcon v-else />
+            </template>
+            <template #action>
+              <Button v-if="hasLoadingError" type="button" variant="secondary" size="small" @click="retryLoading">Tentar novamente</Button>
+              <Button v-else-if="orders.length === 0" type="button" variant="secondary" size="small" @click="createOrder">Novo pedido</Button>
+              <Button v-else-if="hasSearch && hasAdvancedFilters" type="button" variant="secondary" size="small" @click="clearSearchAndAdvancedFilters">Limpar busca e filtros</Button>
+              <Button v-else-if="hasSearch" type="button" variant="secondary" size="small" @click="clearSearch">Limpar busca</Button>
+              <Button v-else type="button" variant="secondary" size="small" @click="clearAdvancedFilters">Limpar filtros</Button>
+            </template>
+          </EmptyState>
+        </template>
+      </DataTable>
+
+      <div
+        v-if="!hasLoadingError"
+        class="mt-4 flex shrink-0 flex-wrap items-center justify-between gap-3">
+        <p class="text-sm text-slate-500" aria-live="polite">
+          Mostrando {{ visibleOrdersStart }}–{{ visibleOrdersEnd }} de {{ filteredOrders.length }} pedidos
+        </p>
+        <Pagination
+          v-model="currentPage"
+          :total="filteredOrders.length"
+          :items-per-page="itemsPerPage"
+          size="medium"
+          label="Paginação de pedidos" />
+      </div>
+    </Card>
   </section>
 </template>
