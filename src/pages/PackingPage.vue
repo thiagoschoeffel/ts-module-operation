@@ -171,7 +171,7 @@ onBeforeUnmount(() => window.removeEventListener('storage', refresh))
       </Card>
     </div>
 
-    <div class="mt-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <Card class="mt-6 [&>div]:p-4">
       <Tabs
         :model-value="activeTab"
         :tabs="tabs"
@@ -182,18 +182,20 @@ onBeforeUnmount(() => window.removeEventListener('storage', refresh))
             {{ tab.value === 'packed' ? availableSnapshot.packed.length : availableSnapshot.awaiting.length }}
           </Badge>
         </template>
-      </Tabs>
 
-      <Input
-        v-model="search"
-        class="w-full lg:w-80"
-        type="search"
-        aria-label="Buscar pedido na fila de embalagem"
-        placeholder="Buscar pedido ou cliente..."
-        clearable>
-        <template #leading><SearchIcon class="size-4" /></template>
-      </Input>
-    </div>
+        <template #content>
+          <Input
+            v-model="search"
+            class="w-full sm:max-w-sm"
+            type="search"
+            aria-label="Buscar pedido na fila de embalagem"
+            placeholder="Buscar pedido ou cliente..."
+            clearable>
+            <template #leading><SearchIcon class="size-4" /></template>
+          </Input>
+        </template>
+      </Tabs>
+    </Card>
 
     <EmptyState
       v-if="hasError"
