@@ -26,6 +26,10 @@ export const operationPages: Record<OperationSection, OperationPageConfig> = {
     subtitle: 'Necessidade do dia calculada a partir dos pedidos confirmados.',
     icon: CookingPotIcon
   },
-  embalagem: { title: 'Embalagem', icon: PackageCheckIcon },
+  embalagem: {
+    title: 'Embalagem',
+    subtitle: 'Confira cada pedido antes de liberá-lo para a expedição.',
+    icon: PackageCheckIcon
+  },
   entregas: { title: 'Entregas', icon: TruckIcon }
 }

@@ -316,7 +316,7 @@ onBeforeUnmount(() => {
         </Card>
       </div>
 
-      <aside class="min-w-0 lg:sticky lg:top-20">
+      <aside class="min-w-0 lg:sticky lg:top-6">
         <OrderSummary
           :customer="customer"
           :address="address"

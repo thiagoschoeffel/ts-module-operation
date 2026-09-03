@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { ArrowRightIcon, Badge, Card, EmptyState } from '@thiagoschoeffel/ts-components'
 import { getPublishedMenu, localDateIso } from '../../mocks/dailyMenu'
+import { getPackingSnapshot } from '../../mocks/packing'
 
 const menu = getPublishedMenu()
 const menuOptions = computed(() => (menu?.options ?? []).map(option => ({
@@ -18,10 +19,11 @@ const productionItems = [
   { label: 'Salada P', quantity: 22, unit: 'unidades' }
 ]
 
+const packing = getPackingSnapshot()
 const packagingItems = [
-  { label: 'aguardando', quantity: 7 },
-  { label: 'embalados', quantity: 29 },
-  { label: 'prontos para rota', quantity: 8 }
+  { label: 'aguardando conferência', quantity: packing.awaiting.length },
+  { label: 'itens pendentes', quantity: packing.awaitingItemCount },
+  { label: 'prontos para rota', quantity: packing.packed.length }
 ]
 
 const routeItems = [

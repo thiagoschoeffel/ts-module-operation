@@ -42,3 +42,17 @@ atualizados automaticamente; alterações persistidas em outra aba também são
 refletidas sem recarregar a página. O modo TV nunca exibe rolagem: quando a
 quantidade de preparações ultrapassa o espaço disponível, o painel divide o
 conteúdo em telas e alterna entre elas automaticamente.
+
+## Fila de embalagem
+
+A rota `/operacoes/embalagem` organiza os pedidos liberados para embalagem por
+janela de entrega. Cada item precisa ser conferido antes que o pedido possa ser
+marcado como embalado; restrições e personalizações recebem destaque visual. A
+conclusão registra responsável e horário no pedido e mantém os volumes
+embalados disponíveis para a futura etapa de roteirização.
+
+Estados previsíveis podem ser revisados sem alterar a massa local:
+
+- `?mock=sem-embalagens`: fila sem pedidos aguardando ou embalados.
+- `?mock=sem-resultados`: busca preenchida sem correspondências.
+- `?mock=erro`: falha simulada ao carregar a fila.

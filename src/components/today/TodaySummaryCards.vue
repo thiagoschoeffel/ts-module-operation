@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { ArrowRightIcon, Card, Progress, TriangleAlertIcon } from '@thiagoschoeffel/ts-components'
+import { getPackingSnapshot } from '../../mocks/packing'
 
 interface SummaryCard {
   label: string
@@ -18,7 +20,8 @@ interface SummaryCard {
   }
 }
 
-const summaries: SummaryCard[] = [
+const packing = getPackingSnapshot()
+const summaries = computed<SummaryCard[]>(() => [
   {
     label: 'Pedidos',
     primary: '42',
@@ -41,7 +44,7 @@ const summaries: SummaryCard[] = [
   },
   {
     label: 'Embalagem',
-    primary: '7',
+    primary: String(packing.awaiting.length),
     secondary: 'aguardando',
     footerLabel: 'Abrir fila',
     action: { label: 'Abrir fila', href: '/operacoes/embalagem' }
@@ -54,7 +57,7 @@ const summaries: SummaryCard[] = [
     hasAlert: true,
     action: { label: 'Ver 1 falha', href: '/operacoes/entregas' }
   }
-]
+])
 </script>
 
 <template>

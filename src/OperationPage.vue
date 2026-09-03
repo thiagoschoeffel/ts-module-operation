@@ -9,6 +9,7 @@ import OperationPlaceholderPage from './pages/OperationPlaceholderPage.vue'
 import NewOrderPage from './pages/NewOrderPage.vue'
 import OrderDetailPage from './pages/OrderDetailPage.vue'
 import OrderListPage from './pages/OrderListPage.vue'
+import PackingPage from './pages/PackingPage.vue'
 import ProductionPage from './pages/ProductionPage.vue'
 import TodayPage from './pages/TodayPage.vue'
 import type { OperationSection, OrderPage } from './types/operation'
@@ -111,6 +112,7 @@ function returnToOrders() {
         v-else-if="props.section === 'pedidos' && props.orderPage === 'detail'"
         :order-id="props.orderId" />
       <ProductionPage v-else-if="props.section === 'producao'" />
+      <PackingPage v-else-if="props.section === 'embalagem'" />
       <OperationPlaceholderPage v-else :title="page.title" />
     </main>
   </div>

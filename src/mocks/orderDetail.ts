@@ -262,7 +262,7 @@ function detailStatusFromSummary(order: MockOrder): OrderDetailStatus {
   if (label.includes('cancelado')) return 'cancelled'
   if (label.includes('entregue') || label.includes('retirado')) return 'completed'
   if (label.includes('saiu para entrega')) return 'delivery'
-  if (label.includes('embalagem') || label.includes('separação')) return 'packing'
+  if (label.includes('embalag') || label.includes('embalad') || label.includes('separação')) return 'packing'
   if (label.includes('produção')) return 'in-production'
   if (label.includes('confirmado')) return 'confirmed'
   if (label.includes('falha na entrega')) return 'failed'
@@ -323,6 +323,7 @@ function genericItems(order: MockOrder): OrderItem[] {
 function detailFromSummary(order: MockOrder): OrderDetail {
   const customer = customers.find(current => current.name === order.customer || current.phone === order.phone)
   const status = detailStatusFromSummary(order)
+  const isPacked = order.statusLabel.toLocaleLowerCase('pt-BR').includes('embalad')
   const deliveryAddress = customer?.addresses[0]
   const financialTotal = parseCurrency(order.total)
   const deliveryFee = order.deliveryWindow && financialTotal >= 4 ? 4 : 0
@@ -333,7 +334,14 @@ function detailFromSummary(order: MockOrder): OrderDetail {
   const operationalState: Partial<OrderDetail> = status === 'in-production'
     ? { productionStartedAt: `Hoje às ${order.createdAt}` }
     : status === 'packing'
-      ? { productionStartedAt: 'Hoje às 09:50' }
+      ? isPacked
+        ? {
+            productionStartedAt: 'Hoje às 09:50',
+            packedAt: `Hoje às ${order.createdAt}`,
+            packedBy: 'Joana',
+            allowedActions: []
+          }
+        : { productionStartedAt: 'Hoje às 09:50' }
       : status === 'delivery'
         ? { packedAt: 'Hoje às 10:32', packedBy: 'Joana', route: { id: 12, driver: 'Carlos Souza', stop: 4, stopCount: 8, status: 'in-progress' } }
         : status === 'completed'
@@ -549,7 +557,7 @@ function summaryStatus(order: OrderDetail): { status: OrderStatus; label: string
   if (order.status === 'cancelled') return { status: 'concluido', label: 'Cancelado' }
   if (order.status === 'failed') return { status: 'problema', label: 'Falha na entrega' }
   if (order.status === 'in-production') return { status: 'andamento', label: 'Em produção' }
-  if (order.status === 'packing') return { status: 'andamento', label: 'Em embalagem' }
+  if (order.status === 'packing') return { status: 'andamento', label: order.packedAt ? 'Embalado' : 'Em embalagem' }
   if (order.status === 'delivery') return { status: 'andamento', label: 'Em entrega' }
   return { status: 'andamento', label: 'Confirmado' }
 }

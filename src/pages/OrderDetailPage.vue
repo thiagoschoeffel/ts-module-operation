@@ -71,6 +71,7 @@ const total = computed(() => Math.max(0,
 const hasBlockingRestriction = computed(() => order.value?.items.some(item => item.hasRestrictionConflict) ?? false)
 const itemCount = computed(() => order.value?.items.length ?? 0)
 const sanitizedOrderNote = computed(() => sanitizeRichText(order.value?.note ?? ''))
+function richTextPlainText(value?: string) { return sanitizeRichText(value ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() }
 const paymentConditionLabel = computed(() => paymentConditionOptions.find(option => option.value === order.value?.paymentCondition)?.label)
 const paymentMethodLabel = computed(() => paymentMethodOptions.find(option => option.value === order.value?.paymentMethod)?.label)
 const paymentDueDateLabel = computed(() => order.value?.paymentDueDate
@@ -91,9 +92,9 @@ const operationalIssues = computed(() => {
 const canConfirm = computed(() => validationComplete.value && operationalIssues.value.length === 0)
 const canCancel = computed(() => Boolean(
   cancellationReason.value
-  && (cancellationReason.value !== 'other' || cancellationDetail.value.trim())
+  && (cancellationReason.value !== 'other' || richTextPlainText(cancellationDetail.value))
 ))
-const canReschedule = computed(() => Boolean(rescheduleWindow.value && rescheduleReason.value.trim()))
+const canReschedule = computed(() => Boolean(rescheduleWindow.value && richTextPlainText(rescheduleReason.value)))
 const rescheduleWindowOptions = computed(() => ['11:00–12:00', '12:00–13:00', '13:00–14:00', '14:00–15:00']
   .filter(window => window !== order.value?.deliveryWindow)
   .map(window => ({ value: window, label: window })))
@@ -429,15 +430,16 @@ onBeforeUnmount(() => {
             <div class="mt-4 grid gap-4 sm:grid-cols-2">
               <div><p class="text-xs font-medium uppercase tracking-wide text-slate-400">Janela anterior</p><p class="mt-1 text-slate-700">{{ order.reschedule.previousWindow }}</p></div>
               <div><p class="text-xs font-medium uppercase tracking-wide text-slate-400">Nova janela</p><p class="mt-1 font-medium text-slate-900">{{ order.reschedule.newWindow }}</p></div>
-              <div><p class="text-xs font-medium uppercase tracking-wide text-slate-400">Motivo</p><p class="mt-1 text-slate-700">{{ order.reschedule.reason }}</p></div>
+              <div><p class="text-xs font-medium uppercase tracking-wide text-slate-400">Motivo</p><div class="mt-1 space-y-2 text-slate-700 [&_a]:text-blue-600 [&_a]:underline [&_blockquote]:border-l-3 [&_blockquote]:border-slate-300 [&_blockquote]:pl-3 [&_em]:italic [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-5 [&_s]:line-through [&_strong]:font-semibold [&_u]:underline [&_ul]:list-disc [&_ul]:pl-5" v-html="sanitizeRichText(order.reschedule.reason)" /></div>
               <div><p class="text-xs font-medium uppercase tracking-wide text-slate-400">Responsável</p><p class="mt-1 text-slate-700">{{ order.reschedule.actor }}</p></div>
+              <div v-if="order.reschedule.note" class="sm:col-span-2"><p class="text-xs font-medium uppercase tracking-wide text-slate-400">Observação</p><div class="mt-1 space-y-2 text-slate-700 [&_a]:text-blue-600 [&_a]:underline [&_blockquote]:border-l-3 [&_blockquote]:border-slate-300 [&_blockquote]:pl-3 [&_em]:italic [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-5 [&_s]:line-through [&_strong]:font-semibold [&_u]:underline [&_ul]:list-disc [&_ul]:pl-5" v-html="sanitizeRichText(order.reschedule.note)" /></div>
             </div>
           </Card>
 
           <Card v-if="order.status === 'cancelled' && order.cancellation">
             <template #header><h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500">Cancelamento</h2></template>
             <div class="grid gap-5 sm:grid-cols-2">
-              <div><p class="text-xs font-medium uppercase tracking-wide text-slate-400">Motivo</p><p class="mt-1 font-medium text-slate-800">{{ order.cancellation.reason }}</p><p v-if="order.cancellation.detail" class="mt-1 text-slate-500">{{ order.cancellation.detail }}</p></div>
+              <div><p class="text-xs font-medium uppercase tracking-wide text-slate-400">Motivo</p><p class="mt-1 font-medium text-slate-800">{{ order.cancellation.reason }}</p><div v-if="order.cancellation.detail" class="mt-1 space-y-2 text-slate-500 [&_a]:text-blue-600 [&_a]:underline [&_blockquote]:border-l-3 [&_blockquote]:border-slate-300 [&_blockquote]:pl-3 [&_em]:italic [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-5 [&_s]:line-through [&_strong]:font-semibold [&_u]:underline [&_ul]:list-disc [&_ul]:pl-5" v-html="sanitizeRichText(order.cancellation.detail)" /></div>
               <div><p class="text-xs font-medium uppercase tracking-wide text-slate-400">Estágio no cancelamento</p><p class="mt-1 font-medium text-slate-800">{{ order.cancellation.stageLabel }}</p></div>
               <div><p class="text-xs font-medium uppercase tracking-wide text-slate-400">Responsável</p><p class="mt-1 text-slate-700">{{ order.cancellation.actor }}</p></div>
               <div><p class="text-xs font-medium uppercase tracking-wide text-slate-400">Data e hora</p><p class="mt-1 text-slate-700">{{ order.cancellation.occurredAt }}</p></div>
@@ -576,7 +578,7 @@ onBeforeUnmount(() => {
           </Card>
         </div>
 
-        <aside class="min-w-0 lg:sticky lg:top-20">
+        <aside class="min-w-0 lg:sticky lg:top-6">
           <Card>
             <template #header><h2 class="text-xs font-semibold uppercase tracking-wider text-slate-500">Resumo do pedido</h2></template>
             <div class="space-y-5">
@@ -705,9 +707,10 @@ onBeforeUnmount(() => {
             v-if="cancellationReason === 'other'"
             v-model="cancellationDetail"
             label="Descreva o motivo"
+            rich-text
             placeholder="Informe o que motivou o cancelamento"
             :rows="3"
-            :error="cancellationSubmitted && !cancellationDetail.trim() ? 'Descreva o motivo do cancelamento.' : undefined"
+            :error="cancellationSubmitted && !richTextPlainText(cancellationDetail) ? 'Descreva o motivo do cancelamento.' : undefined"
             required />
 
           <div v-if="order.cancellationPreview" class="border-t border-slate-200 pt-5">
@@ -752,8 +755,9 @@ onBeforeUnmount(() => {
           <Textarea
             v-model="rescheduleReason"
             label="Motivo"
+            rich-text
             :rows="2"
-            :error="rescheduleSubmitted && !rescheduleReason.trim() ? 'Informe o motivo do reagendamento.' : undefined"
+            :error="rescheduleSubmitted && !richTextPlainText(rescheduleReason) ? 'Informe o motivo do reagendamento.' : undefined"
             required />
           <Textarea v-model="rescheduleNote" label="Observação" rich-text placeholder="Informação útil para a nova tentativa" :rows="3" />
         </div>

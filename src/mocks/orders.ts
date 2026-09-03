@@ -41,5 +41,12 @@ export const mockOrders: MockOrder[] = [
   { id: 133, createdAt: '08:31', customer: 'Henrique Melo', phone: '(11) 94320-6677', channel: 'WhatsApp', itemCount: 3, status: 'andamento', statusLabel: 'Em produção', deliveryWindow: '11:00–12:00', total: 'R$ 68,00' },
   { id: 132, createdAt: '08:23', customer: 'Aline Moraes', phone: '(11) 93210-7788', channel: 'Telefone', itemCount: 1, status: 'concluido', statusLabel: 'Cancelado', deliveryWindow: '13:00–14:00', total: 'R$ 0,00' },
   { id: 131, createdAt: '08:14', customer: 'Diego Ramos', phone: '(11) 92100-8899', channel: 'Balcão', itemCount: 2, status: 'problema', statusLabel: 'Item indisponível', total: 'R$ 30,00' },
-  { id: 130, createdAt: '08:02', customer: 'Lívia Correia', phone: '(11) 91090-9900', channel: 'WhatsApp', itemCount: 3, status: 'aberto', statusLabel: 'Pedido aberto', deliveryWindow: '12:00–13:00', total: 'R$ 63,00' }
+  { id: 130, createdAt: '08:02', customer: 'Lívia Correia', phone: '(11) 91090-9900', channel: 'WhatsApp', itemCount: 3, status: 'aberto', statusLabel: 'Pedido aberto', deliveryWindow: '12:00–13:00', total: 'R$ 63,00' },
+  { id: 129, createdAt: '07:58', customer: 'Maria Silva', phone: '(11) 99876-5432', channel: 'WhatsApp', itemCount: 2, status: 'andamento', statusLabel: 'Em embalagem', deliveryWindow: '12:00–13:00', total: 'R$ 59,00', dietaryRestriction: true },
+  { id: 128, createdAt: '07:51', customer: 'Carlos Mendes', phone: '(11) 96543-2109', channel: 'Telefone', itemCount: 3, status: 'andamento', statusLabel: 'Em embalagem', deliveryWindow: '12:00–13:00', total: 'R$ 72,00', dietaryRestriction: true },
+  { id: 127, createdAt: '07:43', customer: 'Beatriz Rocha', phone: '(11) 95432-1098', channel: 'WhatsApp', itemCount: 1, status: 'andamento', statusLabel: 'Embalado', deliveryWindow: '12:00–13:00', total: 'R$ 25,00' },
+  { id: 126, createdAt: '07:36', customer: 'João Souza', phone: '(11) 98765-4321', channel: 'Telefone', itemCount: 2, status: 'andamento', statusLabel: 'Embalado', deliveryWindow: '11:00–12:00', total: 'R$ 54,00' },
+  { id: 125, createdAt: '07:28', customer: 'Ana Lima', phone: '(11) 97654-3210', channel: 'Balcão', itemCount: 2, status: 'andamento', statusLabel: 'Em embalagem', deliveryWindow: '12:00–13:00', total: 'R$ 48,00' },
+  { id: 124, createdAt: '07:19', customer: 'Roberto Alves', phone: '(11) 94321-0987', channel: 'Telefone', itemCount: 4, status: 'andamento', statusLabel: 'Em embalagem', deliveryWindow: '12:00–13:00', total: 'R$ 86,00', dietaryRestriction: true },
+  { id: 123, createdAt: '07:12', customer: 'Lucas Martins', phone: '(11) 92109-8765', channel: 'Balcão', itemCount: 1, status: 'andamento', statusLabel: 'Em embalagem', deliveryWindow: '12:00–13:00', total: 'R$ 25,00' }
 ]
