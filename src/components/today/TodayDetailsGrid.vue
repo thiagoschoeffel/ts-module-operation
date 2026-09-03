@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { ArrowRightIcon, Badge, Card } from '@thiagoschoeffel/ts-components'
+import { computed } from 'vue'
+import { ArrowRightIcon, Badge, Card, EmptyState } from '@thiagoschoeffel/ts-components'
+import { getPublishedMenu, localDateIso } from '../../mocks/dailyMenu'
 
-const menuOptions = [
-  { label: 'Tradicional', status: 'Disponível', variant: 'success' },
-  { label: 'Low Carb', status: 'Disponível', variant: 'success' },
-  { label: 'Vegetariano', status: 'Esgotado', variant: 'warning' }
-] as const
+const menu = getPublishedMenu()
+const menuOptions = computed(() => (menu?.options ?? []).map(option => ({
+  label: option.category,
+  detail: option.producibleName,
+  status: option.availability === 'available' ? 'Disponível' : option.availability === 'sold-out' ? 'Esgotada' : 'Suspensa',
+  variant: option.availability === 'available' ? 'success' : option.availability === 'sold-out' ? 'warning' : 'danger'
+} as const)))
+const menuHref = `/cardapios/${menu?.date ?? localDateIso()}`
 
 const productionItems = [
   { label: 'Estrogonofe', quantity: 36, unit: 'porções' },
@@ -40,25 +45,29 @@ const deliveryItems = [
         </h2>
       </template>
 
-      <div class="mb-4 flex items-center gap-2 font-medium text-slate-800">
+      <div v-if="menu" class="mb-4 flex items-center gap-2 font-medium text-slate-800">
         <span class="size-2 rounded-full bg-emerald-500" aria-hidden="true" />
         Publicado
       </div>
 
-      <dl class="space-y-2">
+      <dl v-if="menu" class="space-y-2">
         <div v-for="option in menuOptions" :key="option.label" class="flex justify-between gap-4">
-          <dt>{{ option.label }}</dt>
+          <dt><span class="block">{{ option.label }}</span><span class="text-xs text-slate-500">{{ option.detail }}</span></dt>
           <dd><Badge :variant="option.variant">{{ option.status }}</Badge></dd>
         </div>
       </dl>
+      <EmptyState v-else :bordered="false" title="Cardápio não publicado" description="Publique o cardápio para disponibilizá-lo na operação.">
+        <template #icon><span class="text-lg" aria-hidden="true">—</span></template>
+      </EmptyState>
 
       <template #footer>
-        <button
+        <a
+          :href="menuHref"
           class="-mx-6 -my-4 flex w-[calc(100%+3rem)] cursor-pointer items-center justify-between px-6 py-4 font-medium text-slate-800"
-          type="button">
+          >
           Ver cardápio
           <ArrowRightIcon :size="16" :stroke-width="1.75" aria-hidden="true" />
-        </button>
+        </a>
       </template>
     </Card>
 

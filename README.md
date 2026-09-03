@@ -21,3 +21,10 @@ vazios da tabela sem alterar a massa de dados:
 - `?mock=erro`: falha simulada no carregamento da lista.
 
 Sem o parâmetro, a tela continua usando a massa completa de pedidos.
+
+## Integração com o cardápio diário
+
+O dashboard Hoje e a montagem de novos pedidos consultam o cardápio publicado
+do dia. Somente ofertas e opções marcadas como disponíveis podem ser adicionadas
+a novos pedidos; a massa local padrão mantém a demonstração utilizável quando
+nenhum cardápio foi persistido ainda.

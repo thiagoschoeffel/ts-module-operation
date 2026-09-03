@@ -1,4 +1,5 @@
 import type { Customer, Offer } from './types'
+import { getAvailableOffers } from '../../mocks/dailyMenu'
 
 export const customers: Customer[] = [
   {
@@ -15,7 +16,7 @@ export const customers: Customer[] = [
         planName: 'Plano Prato + Salada + Fruta',
         acquiredAt: '2026-08-03',
         remainingCredits: 3,
-        compatibleOfferIds: ['complete', 'daily']
+        compatibleOfferIds: ['oferta-1004', 'oferta-1001']
       }
     ],
     financialCreditBalance: 8,
@@ -80,7 +81,7 @@ export const customers: Customer[] = [
         planName: 'Plano Prato do Dia',
         acquiredAt: '2026-07-28',
         remainingCredits: 2,
-        compatibleOfferIds: ['daily', 'fruit']
+        compatibleOfferIds: ['oferta-1001', 'oferta-1003']
       }
     ],
     addresses: [
@@ -111,14 +112,7 @@ export const customers: Customer[] = [
   }
 ]
 
-export const offers: Offer[] = [
-  { id: 'daily', name: 'Prato do dia', price: 25, requiresConfiguration: false, description: 'Tradicional · Estrogonofe de frango' },
-  { id: 'salad', name: 'Prato + Salada P', price: 30, requiresConfiguration: false, description: 'Tradicional · Salada de folhas' },
-  { id: 'fruit', name: 'Prato + Fruta', price: 29, requiresConfiguration: true, description: 'Escolha o prato e a fruta' },
-  { id: 'complete', name: 'Prato + Salada P + Fruta', price: 34, requiresConfiguration: true, description: 'Escolha o prato, a fruta e adicionais' },
-  { id: 'salad-only', name: 'Salada grande', price: 22, requiresConfiguration: false, description: 'Folhas, legumes e molho da casa' },
-  { id: 'dessert', name: 'Sobremesa do dia', price: 8, requiresConfiguration: false, description: 'Mousse de maracujá' }
-]
+export const offers: Offer[] = getAvailableOffers()
 
 export const deliveryWindowOptions = [
   { value: '11:00–12:00', label: '11:00–12:00' },

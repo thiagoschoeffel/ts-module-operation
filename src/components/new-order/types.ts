@@ -55,4 +55,6 @@ export interface Offer {
   price: number
   requiresConfiguration: boolean
   description: string
+  componentTypes: string[]
+  allowedAddons: { id: string; name: string; price: number }[]
 }

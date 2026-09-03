@@ -15,6 +15,7 @@ import {
   TriangleAlertIcon
 } from '@thiagoschoeffel/ts-components'
 import { formatCurrency, offers, riceSubstitutionOptions } from './mockData'
+import { getPublishedMenu } from '../../mocks/dailyMenu'
 import type { Customer, Offer, OrderItem } from './types'
 
 const props = defineProps<{
@@ -31,19 +32,20 @@ const selectedOffer = ref<Offer>()
 const editingItemId = ref<string>()
 const selectedDish = ref('traditional')
 const selectedFruit = ref('banana')
-const proteinExtra = ref(false)
-const sauceExtra = ref(false)
+const selectedAddonIds = ref<string[]>([])
 const personalizationOpen = ref(false)
 const riceChoice = ref('remove')
 const riceSubstitution = ref(riceSubstitutionOptions[0].value)
 const feedback = ref('')
 const removeConfirmationId = ref<string>()
 
-const dishOptions = [
-  { value: 'traditional', label: 'Tradicional', description: 'Estrogonofe de frango' },
-  { value: 'low-carb', label: 'Low Carb', description: 'Frango grelhado' },
-  { value: 'vegetarian', label: 'Vegetariano · Esgotado', description: 'Lasanha de berinjela', disabled: true }
-]
+const publishedMenu = getPublishedMenu()
+const dishOptions = computed(() => (publishedMenu?.options ?? []).map(option => ({
+  value: option.id,
+  label: option.availability === 'available' ? option.category : `${option.category} · ${option.availability === 'sold-out' ? 'Esgotado' : 'Suspenso'}`,
+  description: option.producibleName,
+  disabled: option.availability !== 'available'
+})))
 const fruitOptions = [
   { value: 'apple', label: 'Maçã' },
   { value: 'banana', label: 'Banana' }
@@ -55,17 +57,18 @@ const riceOptions = [
 ]
 
 const hasRestrictionConflict = computed(() =>
-  props.customer?.restriction === 'Lactose' && selectedDish.value === 'traditional'
+  props.customer?.restriction === 'Lactose'
+  && dishOptions.value.find(option => option.value === selectedDish.value)?.description.toLocaleLowerCase('pt-BR').includes('estrogonofe')
 )
+const selectedAddons = computed(() => selectedOffer.value?.allowedAddons.filter(addon => selectedAddonIds.value.includes(addon.id)) ?? [])
 const itemTotal = computed(() =>
-  (selectedOffer.value?.price ?? 0) + (proteinExtra.value ? 5 : 0) + (sauceExtra.value ? 2 : 0)
+  (selectedOffer.value?.price ?? 0) + selectedAddons.value.reduce((total, addon) => total + addon.price, 0)
 )
 
 function resetConfiguration() {
-  selectedDish.value = 'traditional'
+  selectedDish.value = dishOptions.value.find(option => !option.disabled)?.value ?? ''
   selectedFruit.value = 'banana'
-  proteinExtra.value = false
-  sauceExtra.value = false
+  selectedAddonIds.value = []
   personalizationOpen.value = false
   riceChoice.value = props.customer?.preference === 'Sem arroz'
     ? 'remove'
@@ -84,7 +87,7 @@ function addSimpleOffer(offer: Offer) {
     details: [offer.description],
     additions: [],
     customizations: props.customer?.preference === 'Sem arroz' ? ['Sem arroz'] : [],
-    hasRestrictionConflict: props.customer?.restriction === 'Lactose' && offer.id === 'daily'
+    hasRestrictionConflict: false
   }
   emit('update:modelValue', [...props.modelValue, item])
   feedback.value = `${offer.name} adicionado`
@@ -101,7 +104,7 @@ function saveConfiguredItem() {
   if (!selectedOffer.value)
     return
 
-  const dish = dishOptions.find((option) => option.value === selectedDish.value)
+  const dish = dishOptions.value.find((option) => option.value === selectedDish.value)
   const fruit = fruitOptions.find((option) => option.value === selectedFruit.value)
   const riceReplacement = riceSubstitutionOptions.find((option) => option.value === riceSubstitution.value)
   const item: OrderItem = {
@@ -111,19 +114,16 @@ function saveConfiguredItem() {
     price: itemTotal.value,
     details: [
       `${dish?.label ?? ''} · ${dish?.description ?? ''}`,
-      ...(selectedOffer.value.id === 'fruit' || selectedOffer.value.id === 'complete' ? [`Fruta · ${fruit?.label}`] : []),
-      ...(selectedOffer.value.id === 'complete' ? ['Salada P · Salada de folhas'] : [])
+      ...(hasComponent(selectedOffer.value, 'Fruta') ? [`Fruta · ${fruit?.label}`] : []),
+      ...(hasComponent(selectedOffer.value, 'Salada P') ? ['Salada P · Salada de folhas'] : [])
     ],
-    additions: [
-      ...(proteinExtra.value ? ['Proteína extra · + R$ 5,00'] : []),
-      ...(sauceExtra.value ? ['Molho extra · + R$ 2,00'] : [])
-    ],
+    additions: selectedAddons.value.map(addon => `${addon.name} · + ${formatCurrency(addon.price)}`),
     customizations: riceChoice.value === 'remove'
       ? ['Sem arroz']
       : riceChoice.value === 'replace' && riceReplacement
         ? [`Arroz substituído por ${riceReplacement.label.toLocaleLowerCase('pt-BR')}`]
         : [],
-    hasRestrictionConflict: hasRestrictionConflict.value
+    hasRestrictionConflict: Boolean(hasRestrictionConflict.value)
   }
 
   const items = editingItemId.value
@@ -141,10 +141,10 @@ function editItem(item: OrderItem) {
     return
   selectedOffer.value = offer
   editingItemId.value = item.id
-  selectedDish.value = item.details.some((detail) => detail.startsWith('Low Carb')) ? 'low-carb' : 'traditional'
+  selectedDish.value = dishOptions.value.find(option => item.details.some(detail => detail.startsWith(option.label.split(' · ')[0])))?.value
+    ?? dishOptions.value.find(option => !option.disabled)?.value ?? ''
   selectedFruit.value = item.details.some((detail) => detail.includes('Maçã')) ? 'apple' : 'banana'
-  proteinExtra.value = item.additions.some((addition) => addition.startsWith('Proteína'))
-  sauceExtra.value = item.additions.some((addition) => addition.startsWith('Molho'))
+  selectedAddonIds.value = offer.allowedAddons.filter(addon => item.additions.some(addition => addition.startsWith(addon.name))).map(addon => addon.id)
   const riceReplacement = riceSubstitutionOptions.find((option) =>
     item.customizations.includes(`Arroz substituído por ${option.label.toLocaleLowerCase('pt-BR')}`)
   )
@@ -157,6 +157,14 @@ function editItem(item: OrderItem) {
 
 function isConfigurableItem(item: OrderItem) {
   return offers.some(offer => offer.id === item.offerId && offer.requiresConfiguration)
+}
+
+function hasComponent(offer: Offer, component: string) {
+  return offer.componentTypes.includes(component)
+}
+
+function toggleAddon(id: string, checked: boolean) {
+  selectedAddonIds.value = checked ? [...selectedAddonIds.value, id] : selectedAddonIds.value.filter(current => current !== id)
 }
 
 function removeItem(itemId: string) {
@@ -249,6 +257,9 @@ function handleDrawerOpen(open: boolean) {
               <Alert v-if="feedback" variants="success" :description="feedback">
                 <template #icon><CheckIcon /></template>
               </Alert>
+              <EmptyState v-if="offers.length === 0" :bordered="false" title="Nenhuma oferta disponível" description="O cardápio de hoje não está publicado ou não possui ofertas disponíveis.">
+                <template #icon><ClipboardListIcon /></template>
+              </EmptyState>
               <article v-for="offer in offers" :key="offer.id" class="rounded-lg border border-slate-200 p-4">
                 <div class="flex items-start justify-between gap-4">
                   <div>
@@ -287,17 +298,17 @@ function handleDrawerOpen(open: boolean) {
                 :description="`${props.customer.name} possui restrição a lactose. Estrogonofe contém ingrediente marcado com lactose.`">
                 <template #icon><TriangleAlertIcon /></template>
                 <template #actions>
-                  <Button type="button" variant="secondary" size="small" @click="selectedDish = 'low-carb'">Escolher Low Carb</Button>
+                  <Button v-if="dishOptions.some(option => option.value === 'low-carb' && !option.disabled)" type="button" variant="secondary" size="small" @click="selectedDish = 'low-carb'">Escolher Low Carb</Button>
                 </template>
               </Alert>
 
               <RadioGroup v-model="selectedDish" label="Prato" :options="dishOptions" />
               <RadioGroup
-                v-if="selectedOffer.id === 'fruit' || selectedOffer.id === 'complete'"
+                v-if="hasComponent(selectedOffer, 'Fruta')"
                 v-model="selectedFruit"
                 label="Fruta"
                 :options="fruitOptions" />
-              <div v-if="selectedOffer.id === 'complete'">
+              <div v-if="hasComponent(selectedOffer, 'Salada P')">
                 <p class="mb-2 text-sm font-medium text-slate-700">Salada</p>
                 <Alert
                   variants="info"
@@ -307,10 +318,15 @@ function handleDrawerOpen(open: boolean) {
                 </Alert>
               </div>
 
-              <div class="flex flex-col items-start gap-3">
+              <div v-if="selectedOffer.allowedAddons.length" class="flex flex-col items-start gap-3">
                 <p class="text-sm font-medium text-slate-700">Adicionais</p>
-                <Checkbox v-model="proteinExtra" label="Proteína extra" description="+ R$ 5,00" />
-                <Checkbox v-model="sauceExtra" label="Molho extra" description="+ R$ 2,00" />
+                <Checkbox
+                  v-for="addon in selectedOffer.allowedAddons"
+                  :key="addon.id"
+                  :model-value="selectedAddonIds.includes(addon.id)"
+                  :label="addon.name"
+                  :description="`+ ${formatCurrency(addon.price)}`"
+                  @update:model-value="toggleAddon(addon.id, Boolean($event))" />
               </div>
 
               <Alert
