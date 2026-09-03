@@ -28,3 +28,17 @@ O dashboard Hoje e a montagem de novos pedidos consultam o cardápio publicado
 do dia. Somente ofertas e opções marcadas como disponíveis podem ser adicionadas
 a novos pedidos; a massa local padrão mantém a demonstração utilizável quando
 nenhum cardápio foi persistido ainda.
+
+## Painel de produção
+
+A rota `/operacoes/producao` consolida as escolhas efetivas dos pedidos
+confirmados e em produção para responder quanto preparar em cada janela de
+entrega. Pedidos abertos, cancelados ou já encaminhados para embalagem não
+inflam essa necessidade.
+
+O painel é responsivo para uso em tablets e possui **modo TV**, que ocupa a tela
+inteira com tipografia ampliada. Enquanto estiver aberto, relógio e dados são
+atualizados automaticamente; alterações persistidas em outra aba também são
+refletidas sem recarregar a página. O modo TV nunca exibe rolagem: quando a
+quantidade de preparações ultrapassa o espaço disponível, o painel divide o
+conteúdo em telas e alterna entre elas automaticamente.

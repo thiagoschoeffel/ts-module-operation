@@ -21,7 +21,11 @@ export const operationPages: Record<OperationSection, OperationPageConfig> = {
     subtitle: '42 pedidos confirmados · 4 aguardando revisão',
     icon: ClipboardListIcon
   },
-  producao: { title: 'Produção', icon: CookingPotIcon },
+  producao: {
+    title: 'Produção',
+    subtitle: 'Necessidade do dia calculada a partir dos pedidos confirmados.',
+    icon: CookingPotIcon
+  },
   embalagem: { title: 'Embalagem', icon: PackageCheckIcon },
   entregas: { title: 'Entregas', icon: TruckIcon }
 }

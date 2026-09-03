@@ -1,5 +1,6 @@
 import { customers, formatCurrency, offers } from '../components/new-order/mockData'
 import type { CustomerAddress, OrderItem, PaymentCondition, PaymentMethod } from '../components/new-order/types'
+import { getPublishedMenu } from './dailyMenu'
 import { mockOrders, type MockOrder, type OrderStatus } from './orders'
 
 export type OrderDetailStatus =
@@ -288,14 +289,31 @@ function genericItems(order: MockOrder): OrderItem[] {
 
   return Array.from({ length: order.itemCount }, (_, index) => {
     const offer = offers[index % offers.length]
+    const menu = getPublishedMenu()
+    const availableDishes = menu?.options.filter(option => option.availability === 'available') ?? []
+    const dish = availableDishes[(order.id + index) % Math.max(availableDishes.length, 1)]
+    const hasAlternativeSide = offer.name.toLocaleLowerCase('pt-BR').includes('ou fruta')
+    const details = [
+      ...(offer.componentTypes.includes('Prato do dia')
+        ? [`${dish?.category ?? 'Tradicional'} · ${dish?.producibleName ?? 'Estrogonofe de frango'}`]
+        : []),
+      ...(offer.componentTypes.includes('Salada G')
+        ? ['Salada G · Salada de folhas']
+        : offer.componentTypes.includes('Salada P') && (!hasAlternativeSide || index % 2 === 0)
+          ? ['Salada P · Salada de folhas']
+          : []),
+      ...(offer.componentTypes.includes('Fruta') && (!hasAlternativeSide || index % 2 !== 0)
+        ? [`Fruta · ${index % 2 === 0 ? 'Banana' : 'Maçã'}`]
+        : [])
+    ]
     const restrictionConflict = Boolean(order.dietaryRestriction && order.statusLabel.toLocaleLowerCase('pt-BR').includes('restrição'))
     return {
       id: `order-${order.id}-item-${index + 1}`,
       offerId: offer.id,
       name: offer.name,
       price: basePrice,
-      details: [offer.description],
-      customizations: [],
+      details: details.length ? details : [offer.name],
+      customizations: order.id === 133 && index === 0 ? ['Sem arroz'] : [],
       additions: [],
       hasRestrictionConflict: restrictionConflict && index === 0
     }
@@ -562,4 +580,10 @@ export function getOrderSummaries(): MockOrder[] {
     })
   }
   return [...summaries.values()].sort((first, second) => second.id - first.id)
+}
+
+export function getAllOrderDetails(): OrderDetail[] {
+  return getOrderSummaries()
+    .map(order => getOrderDetail(order.id))
+    .filter((order): order is OrderDetail => Boolean(order))
 }
