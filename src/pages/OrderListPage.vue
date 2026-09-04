@@ -25,6 +25,7 @@ import {
 } from '@thiagoschoeffel/ts-components'
 import { getOrderSummaries } from '../mocks/orderDetail'
 import type { DeliveryWindow, MockOrder as Order, OrderChannel, OrderStatus } from '../mocks/orders'
+import { navigate } from '../utils/navigation'
 
 type OrderSortKey = 'id' | 'customer' | 'statusLabel' | 'deliveryWindow' | 'total'
 type OrderListMockScenario = 'padrao' | 'sem-pedidos' | 'sem-resultados' | 'erro'
@@ -262,11 +263,11 @@ function clearSearchAndAdvancedFilters() {
 }
 
 function createOrder() {
-  window.location.assign(`/operacoes/pedidos/novo?retorno=${encodeURIComponent(listReturnUrl())}`)
+  navigate(`/operacoes/pedidos/novo?retorno=${encodeURIComponent(listReturnUrl())}`)
 }
 
 function openOrder(orderId: number) {
-  window.location.assign(orderHref(orderId))
+  navigate(orderHref(orderId))
 }
 
 function listReturnUrl() {

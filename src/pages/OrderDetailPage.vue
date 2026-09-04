@@ -33,6 +33,7 @@ import { getFrozenStockIssues, previewFrozenOrderAllocations } from '../mocks/fr
 import { getCapacitySnapshot } from '../mocks/capacity'
 import { printPackingLabels } from '../services/packingLabelPrinting'
 import type { PackingLabelPrintSelection } from '../types/packingLabels'
+import { navigate } from '../utils/navigation'
 
 const props = defineProps<{ orderId?: string }>()
 const emit = defineEmits<{
@@ -182,7 +183,7 @@ function loadOrder() {
 }
 
 function goToOrders() {
-  window.location.assign(returnUrl.value)
+  navigate(returnUrl.value)
 }
 
 function retryLoad() {
@@ -194,11 +195,11 @@ function retryLoad() {
 
 function editOrder() {
   if (order.value)
-    window.location.assign(`/operacoes/pedidos/${order.value.id}/editar?retorno=${encodeURIComponent(returnUrl.value)}`)
+    navigate(`/operacoes/pedidos/${order.value.id}/editar?retorno=${encodeURIComponent(returnUrl.value)}`)
 }
 
 function viewCustomer() {
-  window.location.assign('/operacoes/atendimento')
+  navigate('/operacoes/atendimento')
 }
 
 function hasAction(action: OrderAllowedAction) {

@@ -19,6 +19,7 @@ import { customers, formatCurrency, getDefaultDeliveryWindow, offers, paymentCon
 import type { Customer, CustomerAddress, OrderItem, PaymentCondition, PaymentMethod } from '../components/new-order/types'
 import { getOrderDetail, getOrderDomainState, nextOrderId, saveOrderDetail, type OrderDetail } from '../mocks/orderDetail'
 import { getCapacitySnapshot } from '../mocks/capacity'
+import { navigate } from '../utils/navigation'
 
 const props = withDefaults(defineProps<{
   mode?: 'create' | 'edit'
@@ -134,7 +135,7 @@ function cancel() {
 }
 
 function leavePage() {
-  window.location.assign(props.mode === 'edit' && props.orderId
+  navigate(props.mode === 'edit' && props.orderId
     ? detailUrl(props.orderId)
     : returnUrl())
 }
@@ -212,7 +213,7 @@ function saveOrder() {
     savedMessage.value = props.mode === 'edit'
       ? `Alterações do pedido #${savedOrderId} salvas`
       : `Pedido #${savedOrderId} criado como aberto`
-    navigationTimeout = setTimeout(() => window.location.assign(detailUrl(savedOrderId)), 900)
+    navigationTimeout = setTimeout(() => navigate(detailUrl(savedOrderId)), 900)
   }, 500)
 }
 
@@ -234,7 +235,7 @@ onMounted(async () => {
   const existingOrder = props.orderId ? getOrderDetail(props.orderId) : undefined
   if (!existingOrder || existingOrder.status !== 'open') {
     if (props.orderId)
-      window.location.assign(detailUrl(props.orderId))
+      navigate(detailUrl(props.orderId), true)
     return
   }
 

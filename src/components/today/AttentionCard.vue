@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ArrowRightIcon, Badge, Button, Card, TriangleAlertIcon } from '@thiagoschoeffel/ts-components'
+import { navigate } from '../../utils/navigation'
 
 const attentionItems = [
   {
@@ -20,7 +21,7 @@ const attentionItems = [
 ]
 
 function navigateTo(href?: string) {
-  if (href) window.location.assign(href)
+  if (href) navigate(href)
 }
 </script>
 
