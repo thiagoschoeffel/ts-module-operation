@@ -61,10 +61,12 @@ preserva a conferência e a seleção explícita das etiquetas.
 ### Impressão direta em Zebra USB
 
 O serviço de impressão possui suporte preparado para Zebra Browser Print e gera
-ZPL em 100 × 50 mm para impressoras de 203 ou 300 dpi. Configure o ambiente com:
+ZPL em 100 × 50 mm para impressoras de 203 ou 300 dpi. O runtime é carregado
+uma única vez pelo `ts-host`, evitando configurações divergentes entre
+Embalagem e Congelados. Configure o ambiente do host com:
 
 ```dotenv
-VITE_PACKING_PRINT_MODE=zebra
+VITE_LABEL_PRINT_MODE=zebra
 VITE_ZEBRA_BROWSER_PRINT_SCRIPT=/vendor/BrowserPrint.min.js
 VITE_ZEBRA_DPI=203
 ```

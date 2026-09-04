@@ -170,33 +170,14 @@ export function createZebraPackingLabelPrintAdapter(
   }
 }
 
-let browserPrintScriptLoad: Promise<void> | undefined
-
 function configuredPrintMode() {
-  const value = import.meta.env?.VITE_PACKING_PRINT_MODE
-  return value === 'browser' || value === 'zebra' ? value : 'auto'
+  return window.tsLabelPrinter?.mode ?? 'auto'
 }
 
 export function usesDirectZebraPackingPrint() {
   const mode = configuredPrintMode()
   return mode === 'zebra'
     || (mode === 'auto' && typeof window !== 'undefined' && Boolean(window.BrowserPrint))
-}
-
-async function loadBrowserPrintScript(url: string) {
-  if (window.BrowserPrint) return
-  browserPrintScriptLoad ??= new Promise<void>((resolve, reject) => {
-    const script = document.createElement('script')
-    script.src = url
-    script.async = true
-    script.dataset.zebraBrowserPrint = 'true'
-    script.addEventListener('load', () => window.BrowserPrint
-      ? resolve()
-      : reject(new Error('A biblioteca Zebra Browser Print foi carregada, mas não ficou disponível.')), { once: true })
-    script.addEventListener('error', () => reject(new Error('Não foi possível carregar a biblioteca Zebra Browser Print.')), { once: true })
-    document.head.append(script)
-  })
-  await browserPrintScriptLoad
 }
 
 export const browserPackingLabelPrintAdapter: PackingLabelPrintAdapter = {
@@ -251,10 +232,9 @@ async function defaultPackingLabelPrintAdapter() {
   const mode = configuredPrintMode()
   if (mode === 'browser') return browserPackingLabelPrintAdapter
 
-  const scriptUrl = import.meta.env?.VITE_ZEBRA_BROWSER_PRINT_SCRIPT
-  if (!window.BrowserPrint && scriptUrl) {
+  if (!window.BrowserPrint && window.tsLabelPrinter) {
     try {
-      await loadBrowserPrintScript(scriptUrl)
+      await window.tsLabelPrinter.loadBrowserPrint()
     }
     catch (error) {
       if (mode === 'zebra') throw error
@@ -262,7 +242,7 @@ async function defaultPackingLabelPrintAdapter() {
   }
 
   if (window.BrowserPrint) {
-    const dpi: ZebraPrinterDpi = import.meta.env?.VITE_ZEBRA_DPI === '300' ? 300 : 203
+    const dpi = window.tsLabelPrinter?.dpi ?? 203
     return createZebraPackingLabelPrintAdapter(window.BrowserPrint, dpi)
   }
   if (mode === 'zebra')

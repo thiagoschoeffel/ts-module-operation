@@ -188,7 +188,7 @@ async function finishPacking() {
     feedback.value = {
       variant: 'success',
       title: `Pedido #${order.id} embalado`,
-      description: `${selection.dailyItemLabelIds.length} etiqueta(s) de item e 1 etiqueta do pacote foram abertas para impressão.`
+      description: `${selection.dailyItemLabelIds.length} etiqueta(s) de item e 1 etiqueta do pacote foram enviadas para impressão.`
     }
   }
   catch (error) {
@@ -349,7 +349,7 @@ onBeforeUnmount(() => window.removeEventListener('storage', refresh))
 
         <ScrollArea
           orientation="horizontal"
-          scrollbar-visibility="always"
+          scrollbar-visibility="auto"
           class="pb-3 [&_[data-reka-scroll-area-viewport]]:!h-auto">
           <div class="flex items-start gap-4 pb-3">
           <Card
