@@ -336,7 +336,7 @@ onBeforeUnmount(() => {
         <template #icon><CheckIcon /></template>
       </Alert>
 
-      <div class="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div class="ts-responsive-row mb-5 gap-4">
         <div class="flex flex-col items-start gap-2">
           <p class="font-medium text-slate-800">{{ order.customer.name }}</p>
           <p class="text-sm text-slate-500">{{ statusTimestamp }}</p>

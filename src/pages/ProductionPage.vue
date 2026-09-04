@@ -143,7 +143,7 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
-    <div class="mb-4 flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div class="ts-responsive-row mb-4 shrink-0 gap-3">
       <p class="text-sm text-slate-500" role="status" aria-live="polite">
         Atualizado às {{ updatedTime }} · atualiza a cada 15 segundos
       </p>

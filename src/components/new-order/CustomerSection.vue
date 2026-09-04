@@ -135,7 +135,7 @@ function createCustomer() {
     </div>
 
     <div v-else>
-      <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+      <div class="ts-responsive-row-start gap-4">
         <div>
           <p class="font-semibold text-slate-800">{{ props.modelValue.name }}</p>
           <p class="mt-1 text-sm text-slate-500">{{ props.modelValue.phone }}</p>

@@ -10,3 +10,22 @@
     font-family: var(--font-sans);
   }
 }
+
+.ts-responsive-row,
+.ts-responsive-row-start {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+@media (min-width: 40rem) {
+  .ts-responsive-row,
+  .ts-responsive-row-start {
+    flex-direction: row;
+    justify-content: space-between;
+  }
+
+  .ts-responsive-row {
+    align-items: center;
+  }
+}

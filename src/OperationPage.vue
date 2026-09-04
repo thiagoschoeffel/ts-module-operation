@@ -70,7 +70,7 @@ function returnToOrders() {
     :class="(props.section === 'pedidos' && props.orderPage === 'list') || props.section === 'entregas'
       ? 'md:flex md:h-[calc(100dvh-11rem)] md:min-h-0 md:flex-col'
       : ''">
-    <div v-if="props.section !== 'entregas'" class="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div v-if="props.section !== 'entregas'" class="ts-responsive-row gap-4">
       <PageHeader :title="pageTitle" :subtitle="pageSubtitle">
         <template #icon>
           <component :is="page.icon" :size="32" :stroke-width="1.75" />

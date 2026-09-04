@@ -463,7 +463,7 @@ onBeforeUnmount(() => {
     @update:model-value="updateTab">
     <template #content>
       <div class="pt-4 md:flex md:h-full md:min-h-0 md:flex-col">
-        <div class="flex shrink-0 flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div class="ts-responsive-row shrink-0 gap-4">
           <PageHeader :title="`Entregas — ${activeContent.title}`" :subtitle="activeContent.subtitle">
             <template #icon><TruckIcon class="size-8" :stroke-width="1.75" /></template>
           </PageHeader>
