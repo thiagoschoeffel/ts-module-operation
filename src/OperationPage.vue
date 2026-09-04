@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Button, ChevronLeftIcon, PageHeader, PlusIcon } from '@thiagoschoeffel/ts-components'
 import '@thiagoschoeffel/ts-components/style.css'
 import './style.css'
 import DataSyncStatus from './components/DataSyncStatus.vue'
+import WhatsAppQuotaSummary from './components/attendance/WhatsAppQuotaSummary.vue'
 import { operationPages } from './config/operationPages'
+import { loadWhatsAppQuotaUsage } from './mocks/attendance'
+import AttendancePage from './pages/AttendancePage.vue'
 import OperationPlaceholderPage from './pages/OperationPlaceholderPage.vue'
 import NewOrderPage from './pages/NewOrderPage.vue'
 import OrderDetailPage from './pages/OrderDetailPage.vue'
@@ -14,6 +17,7 @@ import DeliveryPage from './pages/DeliveryPage.vue'
 import ProductionPage from './pages/ProductionPage.vue'
 import TodayPage from './pages/TodayPage.vue'
 import type { OperationSection, OrderPage } from './types/operation'
+import type { WhatsAppQuotaUsage } from './types/attendance'
 import { navigate } from './utils/navigation'
 
 const props = withDefaults(
@@ -29,6 +33,7 @@ const props = withDefaults(
 )
 
 const page = computed(() => operationPages[props.section])
+const attendanceQuota = ref<WhatsAppQuotaUsage>()
 const pageTitle = computed(() => {
   if (props.section !== 'pedidos')
     return page.value.title
@@ -50,6 +55,10 @@ const pageSubtitle = computed(() => {
   return page.value.subtitle
 })
 
+watch(() => props.section, async (section) => {
+  attendanceQuota.value = section === 'atendimento' ? await loadWhatsAppQuotaUsage() : undefined
+}, { immediate: true })
+
 function createOrder() {
   const returnUrl = `${window.location.pathname}${window.location.search}`
   navigate(`/operacoes/pedidos/novo?retorno=${encodeURIComponent(returnUrl)}`)
@@ -67,10 +76,14 @@ function returnToOrders() {
 <template>
   <div
     class="isolate"
-    :class="(props.section === 'pedidos' && props.orderPage === 'list') || props.section === 'entregas'
+    :class="(props.section === 'pedidos' && props.orderPage === 'list') || props.section === 'entregas' || props.section === 'atendimento'
       ? 'md:flex md:h-[calc(100dvh-11rem)] md:min-h-0 md:flex-col'
       : ''">
-    <div v-if="props.section !== 'entregas'" class="ts-responsive-row gap-4">
+    <div
+      v-if="props.section !== 'entregas'"
+      :class="props.section === 'atendimento'
+        ? 'grid gap-x-8 gap-y-3 lg:grid-cols-[minmax(20rem,1fr)_minmax(30rem,42rem)] lg:items-start'
+        : 'ts-responsive-row gap-4'">
       <PageHeader :title="pageTitle" :subtitle="pageSubtitle">
         <template #icon>
           <component :is="page.icon" :size="32" :stroke-width="1.75" />
@@ -78,6 +91,10 @@ function returnToOrders() {
       </PageHeader>
 
       <DataSyncStatus v-if="props.section === 'hoje'" status="synced" />
+
+      <WhatsAppQuotaSummary
+        v-if="props.section === 'atendimento' && attendanceQuota"
+        :usage="attendanceQuota" />
 
       <button
         v-if="props.section === 'pedidos' && props.orderPage !== 'list'"
@@ -103,9 +120,10 @@ function returnToOrders() {
     <main
       :class="[
         props.section === 'entregas' ? '' : 'mt-6',
-        (props.section === 'pedidos' && props.orderPage === 'list') || props.section === 'entregas' ? 'md:min-h-0 md:flex-1' : ''
+        (props.section === 'pedidos' && props.orderPage === 'list') || props.section === 'entregas' || props.section === 'atendimento' ? 'operation-fill-main' : ''
       ]">
       <TodayPage v-if="props.section === 'hoje'" />
+      <AttendancePage v-else-if="props.section === 'atendimento'" :quota-usage="attendanceQuota" />
       <OrderListPage v-else-if="props.section === 'pedidos' && props.orderPage === 'list'" />
       <NewOrderPage
         v-else-if="props.section === 'pedidos' && (props.orderPage === 'new' || props.orderPage === 'edit')"
@@ -121,3 +139,14 @@ function returnToOrders() {
     </main>
   </div>
 </template>
+
+<style scoped>
+@media (min-width: 48rem) {
+  .operation-fill-main {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 0%;
+    flex-direction: column;
+  }
+}
+</style>

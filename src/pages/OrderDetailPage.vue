@@ -137,7 +137,7 @@ const statusTimestamp = computed(() => {
 })
 const returnUrl = computed(() => {
   const candidate = new URLSearchParams(window.location.search).get('retorno')
-  return candidate && /^\/operacoes\/pedidos(?:\?.*)?$/.test(candidate)
+  return candidate && /^\/operacoes\/(?:pedidos(?:\?.*)?|atendimento(?:\?.*)?)$/.test(candidate)
     ? candidate
     : '/operacoes/pedidos'
 })

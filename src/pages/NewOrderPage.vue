@@ -139,7 +139,7 @@ function leavePage() {
 
 function returnUrl() {
   const candidate = new URLSearchParams(window.location.search).get('retorno')
-  return candidate && /^\/operacoes\/pedidos(?:\?.*)?$/.test(candidate)
+  return candidate && /^\/operacoes\/(?:pedidos(?:\?.*)?|atendimento(?:\?.*)?)$/.test(candidate)
     ? candidate
     : '/operacoes/pedidos'
 }
@@ -223,8 +223,11 @@ function warnBeforeUnload(event: BeforeUnloadEvent) {
 
 onMounted(async () => {
   window.addEventListener('beforeunload', warnBeforeUnload)
-  if (props.mode !== 'edit')
+  if (props.mode !== 'edit') {
+    const customerId = new URLSearchParams(window.location.search).get('cliente')
+    customer.value = customers.find(current => current.id === customerId)
     return
+  }
 
   const existingOrder = props.orderId ? getOrderDetail(props.orderId) : undefined
   if (!existingOrder || existingOrder.status !== 'open') {

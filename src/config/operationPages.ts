@@ -15,7 +15,11 @@ export const operationPages: Record<OperationSection, OperationPageConfig> = {
     subtitle: formatLongDate(),
     icon: CalendarDaysIcon
   },
-  atendimento: { title: 'Atendimento', icon: MessagesSquareIcon },
+  atendimento: {
+    title: 'Atendimento',
+    subtitle: 'Acompanhe conversas do WhatsApp e prepare pedidos para revisão.',
+    icon: MessagesSquareIcon
+  },
   pedidos: {
     title: 'Pedidos',
     subtitle: '42 pedidos confirmados · 4 aguardando revisão',
