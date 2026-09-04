@@ -42,6 +42,7 @@ const removeConfirmationId = ref<string>()
 const publishedMenu = getPublishedMenu()
 const dishOptions = computed(() => (publishedMenu?.options ?? []).map(option => ({
   value: option.id,
+  producibleId: option.producibleId,
   label: option.availability === 'available' ? option.category : `${option.category} · ${option.availability === 'sold-out' ? 'Esgotado' : 'Suspenso'}`,
   description: option.producibleName,
   disabled: option.availability !== 'available'
@@ -86,6 +87,13 @@ function addSimpleOffer(offer: Offer) {
     price: offer.price,
     details: [offer.description],
     additions: [],
+    effectiveComponents: offer.componentTypes.map((name, index) => ({
+      id: `${offer.id}-component-${index + 1}`,
+      name,
+      unit: name === 'Fruta' ? 'unidades' as const : 'porções' as const,
+      quantity: 1,
+      source: 'offer-component' as const
+    })),
     customizations: props.customer?.preference === 'Sem arroz' ? ['Sem arroz'] : [],
     hasRestrictionConflict: false
   }
@@ -118,6 +126,36 @@ function saveConfiguredItem() {
       ...(hasComponent(selectedOffer.value, 'Salada P') ? ['Salada P · Salada de folhas'] : [])
     ],
     additions: selectedAddons.value.map(addon => `${addon.name} · + ${formatCurrency(addon.price)}`),
+    effectiveComponents: [
+      ...(dish ? [{
+        id: dish.producibleId,
+        name: dish.description,
+        unit: 'porções' as const,
+        quantity: 1,
+        source: 'producible' as const
+      }] : []),
+      ...(hasComponent(selectedOffer.value, 'Fruta') && fruit ? [{
+        id: `fruit-${fruit.value}`,
+        name: fruit.label,
+        unit: 'unidades' as const,
+        quantity: 1,
+        source: 'offer-component' as const
+      }] : []),
+      ...(hasComponent(selectedOffer.value, 'Salada P') ? [{
+        id: 'side-small-salad',
+        name: 'Salada de folhas',
+        unit: 'porções' as const,
+        quantity: 1,
+        source: 'offer-component' as const
+      }] : []),
+      ...selectedAddons.value.map(addon => ({
+        id: addon.id,
+        name: addon.name,
+        unit: 'porções' as const,
+        quantity: 1,
+        source: 'addon' as const
+      }))
+    ],
     customizations: riceChoice.value === 'remove'
       ? ['Sem arroz']
       : riceChoice.value === 'replace' && riceReplacement

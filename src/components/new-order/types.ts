@@ -45,8 +45,18 @@ export interface OrderItem {
   price: number
   details: string[]
   additions: string[]
+  /** Snapshot operacional usado por Produção; textos de apresentação não são fonte de cálculo. */
+  effectiveComponents: OrderItemComponent[]
   customizations: string[]
   hasRestrictionConflict: boolean
+}
+
+export interface OrderItemComponent {
+  id: string
+  name: string
+  unit: 'porções' | 'unidades'
+  quantity: number
+  source: 'producible' | 'addon' | 'offer-component'
 }
 
 export interface Offer {

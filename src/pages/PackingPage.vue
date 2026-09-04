@@ -6,7 +6,6 @@ import {
   Button,
   Card,
   CheckIcon,
-  Checkbox,
   EmptyState,
   Input,
   PackageCheckIcon,
@@ -21,7 +20,6 @@ import { getPackingSnapshot } from '../mocks/packing'
 
 type PackingTab = 'awaiting' | 'packed'
 type PackingMockScenario = 'padrao' | 'sem-embalagens' | 'sem-resultados' | 'erro'
-type CheckboxState = boolean | 'indeterminate'
 
 const params = new URLSearchParams(window.location.search)
 const validScenarios = new Set<PackingMockScenario>(['padrao', 'sem-embalagens', 'sem-resultados', 'erro'])
@@ -34,7 +32,6 @@ const requestedTab = params.get('tab')
 const snapshot = ref(getPackingSnapshot())
 const activeTab = ref<PackingTab>(requestedTab === 'packed' ? 'packed' : 'awaiting')
 const search = ref(mockScenario === 'sem-resultados' ? 'Cliente inexistente' : '')
-const checkedItems = ref<Record<number, string[]>>({})
 const feedback = ref('')
 const hasError = ref(mockScenario === 'erro')
 
@@ -83,47 +80,9 @@ function updateTab(value: string) {
   window.history.replaceState(window.history.state, '', url)
 }
 
-function updateItemCheck(orderId: number, itemId: string, state: CheckboxState) {
-  const current = new Set(checkedItems.value[orderId] ?? [])
-  if (state === true)
-    current.add(itemId)
-  else
-    current.delete(itemId)
-  checkedItems.value = { ...checkedItems.value, [orderId]: [...current] }
-}
-
-function isChecked(orderId: number, itemId: string) {
-  return checkedItems.value[orderId]?.includes(itemId) ?? false
-}
-
-function isOrderReady(order: OrderDetail) {
-  return order.items.length > 0 && order.items.every(item => isChecked(order.id, item.id))
-}
-
-function toggleAll(order: OrderDetail, state: CheckboxState) {
-  checkedItems.value = {
-    ...checkedItems.value,
-    [order.id]: state === true ? order.items.map(item => item.id) : []
-  }
-}
-
-function orderCheckState(order: OrderDetail): CheckboxState {
-  const checkedCount = checkedItems.value[order.id]?.length ?? 0
-  if (checkedCount === 0)
-    return false
-  if (checkedCount === order.items.length)
-    return true
-  return 'indeterminate'
-}
-
 function finishPacking(order: OrderDetail) {
-  if (!isOrderReady(order))
-    return
   markOrderPacked(order)
   feedback.value = `Pedido #${order.id} marcado como embalado`
-  const nextChecked = { ...checkedItems.value }
-  delete nextChecked[order.id]
-  checkedItems.value = nextChecked
   refresh()
 }
 
@@ -246,12 +205,7 @@ onBeforeUnmount(() => window.removeEventListener('storage', refresh))
                   <p class="mt-1 truncate text-sm font-medium text-slate-700">{{ order.customer.name }}</p>
                   <p class="text-xs text-slate-500">{{ order.customer.phone }} · {{ order.customer.channel }}</p>
                 </div>
-                <Checkbox
-                  v-if="!order.packedAt"
-                  :model-value="orderCheckState(order)"
-                  :aria-label="`Conferir todos os itens do pedido ${order.id}`"
-                  @update:model-value="toggleAll(order, $event)" />
-                <CheckIcon v-else class="size-5 shrink-0 text-emerald-600" aria-hidden="true" />
+                <CheckIcon v-if="order.packedAt" class="size-5 shrink-0 text-emerald-600" aria-hidden="true" />
               </div>
             </template>
 
@@ -266,13 +220,7 @@ onBeforeUnmount(() => window.removeEventListener('storage', refresh))
 
             <ul class="divide-y divide-slate-100">
               <li v-for="(item, index) in order.items" :key="item.id" class="flex gap-3 py-3 first:pt-0 last:pb-0">
-                <Checkbox
-                  v-if="!order.packedAt"
-                  class="mt-0.5"
-                  :model-value="isChecked(order.id, item.id)"
-                  :aria-label="`Conferir item ${index + 1} do pedido ${order.id}`"
-                  @update:model-value="updateItemCheck(order.id, item.id, $event)" />
-                <span v-else class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                <span v-if="order.packedAt" class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
                   <CheckIcon class="size-3.5" aria-hidden="true" />
                 </span>
                 <div class="min-w-0 flex-1">
@@ -301,7 +249,7 @@ onBeforeUnmount(() => window.removeEventListener('storage', refresh))
                 <a :href="`/operacoes/pedidos/${order.id}`" class="text-sm font-medium text-slate-400 hover:text-slate-800">
                   Ver pedido
                 </a>
-                <Button variant="success" :disabled="!isOrderReady(order)" @click="finishPacking(order)">
+                <Button variant="success" @click="finishPacking(order)">
                   <template #icon><PackageCheckIcon /></template>
                   Marcar como embalado
                 </Button>

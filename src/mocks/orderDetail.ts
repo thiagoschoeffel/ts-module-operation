@@ -269,6 +269,12 @@ const featuredOrder: OrderDetail = {
       details: ['Tradicional · Estrogonofe de frango', 'Salada P · Salada de folhas', 'Fruta · Banana'],
       customizations: ['Sem arroz'],
       additions: ['Proteína extra · + R$ 5,00'],
+      effectiveComponents: [
+        { id: 'prod-1004', name: 'Estrogonofe de frango', unit: 'porções', quantity: 1, source: 'producible' },
+        { id: 'side-small-salad', name: 'Salada de folhas', unit: 'porções', quantity: 1, source: 'offer-component' },
+        { id: 'fruit-banana', name: 'Banana', unit: 'unidades', quantity: 1, source: 'offer-component' },
+        { id: 'adic-1001', name: 'Proteína extra', unit: 'porções', quantity: 1, source: 'addon' }
+      ],
       hasRestrictionConflict: false
     },
     {
@@ -279,6 +285,9 @@ const featuredOrder: OrderDetail = {
       details: ['Low Carb · Frango grelhado'],
       customizations: ['Arroz substituído por legumes refogados'],
       additions: [],
+      effectiveComponents: [
+        { id: 'prod-1003', name: 'Frango grelhado', unit: 'porções', quantity: 1, source: 'producible' }
+      ],
       hasRestrictionConflict: false
     }
   ],
@@ -359,6 +368,29 @@ function genericItems(order: MockOrder): OrderItem[] {
       details: details.length ? details : [offer.name],
       customizations: order.id === 133 && index === 0 ? ['Sem arroz'] : [],
       additions: [],
+      effectiveComponents: [
+        ...(dish ? [{
+          id: dish.producibleId,
+          name: dish.producibleName,
+          unit: 'porções' as const,
+          quantity: 1,
+          source: 'producible' as const
+        }] : []),
+        ...(offer.componentTypes.includes('Salada G') || (offer.componentTypes.includes('Salada P') && (!hasAlternativeSide || index % 2 === 0)) ? [{
+          id: offer.componentTypes.includes('Salada G') ? 'side-large-salad' : 'side-small-salad',
+          name: 'Salada de folhas',
+          unit: 'porções' as const,
+          quantity: 1,
+          source: 'offer-component' as const
+        }] : []),
+        ...(offer.componentTypes.includes('Fruta') && (!hasAlternativeSide || index % 2 !== 0) ? [{
+          id: index % 2 === 0 ? 'fruit-banana' : 'fruit-apple',
+          name: index % 2 === 0 ? 'Banana' : 'Maçã',
+          unit: 'unidades' as const,
+          quantity: 1,
+          source: 'offer-component' as const
+        }] : [])
+      ],
       hasRestrictionConflict: restrictionConflict && index === 0
     }
   })

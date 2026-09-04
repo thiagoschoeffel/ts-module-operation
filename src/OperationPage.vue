@@ -14,6 +14,7 @@ import DeliveryPage from './pages/DeliveryPage.vue'
 import ProductionPage from './pages/ProductionPage.vue'
 import TodayPage from './pages/TodayPage.vue'
 import type { OperationSection, OrderPage } from './types/operation'
+import { navigate } from './utils/navigation'
 
 const props = withDefaults(
   defineProps<{
@@ -51,7 +52,7 @@ const pageSubtitle = computed(() => {
 
 function createOrder() {
   const returnUrl = `${window.location.pathname}${window.location.search}`
-  window.location.assign(`/operacoes/pedidos/novo?retorno=${encodeURIComponent(returnUrl)}`)
+  navigate(`/operacoes/pedidos/novo?retorno=${encodeURIComponent(returnUrl)}`)
 }
 
 function returnToOrders() {
@@ -59,7 +60,7 @@ function returnToOrders() {
   const returnUrl = candidate && /^\/operacoes\/pedidos(?:\?.*)?$/.test(candidate)
     ? candidate
     : '/operacoes/pedidos'
-  window.location.assign(returnUrl)
+  navigate(returnUrl)
 }
 </script>
 

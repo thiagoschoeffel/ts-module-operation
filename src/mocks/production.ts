@@ -31,18 +31,6 @@ export interface ProductionSnapshot {
 
 const productionStatuses = new Set<OrderDetail['status']>(['confirmed', 'in-production'])
 
-function componentFromDetail(detail: string) {
-  const [category, resolvedName] = detail.split('·', 2).map(value => value.trim())
-  return {
-    name: resolvedName ?? category,
-    unit: category === 'Fruta' ? 'unidades' : 'porções'
-  }
-}
-
-function componentFromAddition(addition: string) {
-  return { name: addition.split('·', 1)[0].trim(), unit: 'porções' }
-}
-
 function normalizedKey(value: string) {
   return value.toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 }
@@ -60,9 +48,9 @@ export function getProductionSnapshot(): ProductionSnapshot {
 
   for (const order of orders) {
     for (const item of order.items) {
-      const components = [...item.details.map(componentFromDetail), ...item.additions.map(componentFromAddition)]
+      const components = item.effectiveComponents ?? []
       for (const [componentIndex, component] of components.entries()) {
-        const key = normalizedKey(component.name)
+        const key = component.id || normalizedKey(component.name)
         const current = needs.get(key) ?? {
           name: component.name,
           unit: component.unit,
@@ -72,9 +60,9 @@ export function getProductionSnapshot(): ProductionSnapshot {
           customizations: new Map<string, number>()
         }
         const window = order.deliveryWindow ?? 'Sem janela'
-        current.quantity += 1
+        current.quantity += component.quantity
         current.orderIds.add(order.id)
-        current.windows.set(window, (current.windows.get(window) ?? 0) + 1)
+        current.windows.set(window, (current.windows.get(window) ?? 0) + component.quantity)
         if (componentIndex === 0) {
           for (const customization of item.customizations)
             current.customizations.set(customization, (current.customizations.get(customization) ?? 0) + 1)
