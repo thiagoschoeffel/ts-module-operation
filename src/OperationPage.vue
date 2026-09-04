@@ -10,6 +10,7 @@ import NewOrderPage from './pages/NewOrderPage.vue'
 import OrderDetailPage from './pages/OrderDetailPage.vue'
 import OrderListPage from './pages/OrderListPage.vue'
 import PackingPage from './pages/PackingPage.vue'
+import DeliveryPage from './pages/DeliveryPage.vue'
 import ProductionPage from './pages/ProductionPage.vue'
 import TodayPage from './pages/TodayPage.vue'
 import type { OperationSection, OrderPage } from './types/operation'
@@ -65,10 +66,10 @@ function returnToOrders() {
 <template>
   <div
     class="isolate"
-    :class="props.section === 'pedidos' && props.orderPage === 'list'
+    :class="(props.section === 'pedidos' && props.orderPage === 'list') || props.section === 'entregas'
       ? 'md:flex md:h-[calc(100dvh-11rem)] md:min-h-0 md:flex-col'
       : ''">
-    <div class="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div v-if="props.section !== 'entregas'" class="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
       <PageHeader :title="pageTitle" :subtitle="pageSubtitle">
         <template #icon>
           <component :is="page.icon" :size="32" :stroke-width="1.75" />
@@ -95,13 +96,14 @@ function returnToOrders() {
         </template>
         Novo pedido
       </Button>
+
     </div>
 
     <main
-      class="mt-6"
-      :class="props.section === 'pedidos' && props.orderPage === 'list'
-        ? 'md:min-h-0 md:flex-1'
-        : ''">
+      :class="[
+        props.section === 'entregas' ? '' : 'mt-6',
+        (props.section === 'pedidos' && props.orderPage === 'list') || props.section === 'entregas' ? 'md:min-h-0 md:flex-1' : ''
+      ]">
       <TodayPage v-if="props.section === 'hoje'" />
       <OrderListPage v-else-if="props.section === 'pedidos' && props.orderPage === 'list'" />
       <NewOrderPage
@@ -113,6 +115,7 @@ function returnToOrders() {
         :order-id="props.orderId" />
       <ProductionPage v-else-if="props.section === 'producao'" />
       <PackingPage v-else-if="props.section === 'embalagem'" />
+      <DeliveryPage v-else-if="props.section === 'entregas'" />
       <OperationPlaceholderPage v-else :title="page.title" />
     </main>
   </div>

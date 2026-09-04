@@ -31,5 +31,9 @@ export const operationPages: Record<OperationSection, OperationPageConfig> = {
     subtitle: 'Confira cada pedido antes de liberá-lo para a expedição.',
     icon: PackageCheckIcon
   },
-  entregas: { title: 'Entregas', icon: TruckIcon }
+  entregas: {
+    title: 'Entregas',
+    subtitle: 'Planeje rotas e acompanhe cada pedido até a confirmação da entrega.',
+    icon: TruckIcon
+  }
 }

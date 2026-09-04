@@ -122,6 +122,49 @@ const statusLabel: Record<OrderDetailStatus, string> = {
   cancelled: 'Cancelado'
 }
 
+const mockRouteAssignments: Record<number, NonNullable<OrderDetail['route']>> = {
+  141: { id: 11, driver: 'Mariana Lima', stop: 1, stopCount: 1, status: 'completed' },
+  142: { id: 10, driver: 'Rafael Santos', stop: 1, stopCount: 1, status: 'completed' },
+  143: { id: 12, driver: 'Carlos Souza', stop: 1, stopCount: 1, status: 'in-progress' },
+  156: { id: 22, driver: 'Mariana Lima', stop: 3, stopCount: 3, status: 'planned' },
+  157: { id: 22, driver: 'Mariana Lima', stop: 2, stopCount: 3, status: 'planned' },
+  158: { id: 22, driver: 'Mariana Lima', stop: 1, stopCount: 3, status: 'planned' },
+  159: { id: 21, driver: 'Rafael Santos', stop: 2, stopCount: 2, status: 'planned' },
+  160: { id: 21, driver: 'Rafael Santos', stop: 1, stopCount: 2, status: 'planned' },
+  161: { id: 26, driver: 'Carlos Souza', stop: 1, stopCount: 2, status: 'completed' },
+  162: { id: 25, driver: 'Rafael Santos', stop: 3, stopCount: 3, status: 'completed' },
+  163: { id: 25, driver: 'Rafael Santos', stop: 2, stopCount: 3, status: 'completed' },
+  164: { id: 25, driver: 'Rafael Santos', stop: 1, stopCount: 3, status: 'completed' },
+  165: { id: 24, driver: 'Mariana Lima', stop: 3, stopCount: 3, status: 'completed' },
+  166: { id: 24, driver: 'Mariana Lima', stop: 2, stopCount: 3, status: 'completed' },
+  167: { id: 24, driver: 'Mariana Lima', stop: 1, stopCount: 3, status: 'completed' },
+  168: { id: 23, driver: 'Carlos Souza', stop: 1, stopCount: 3, status: 'completed' },
+  169: { id: 23, driver: 'Carlos Souza', stop: 2, stopCount: 3, status: 'in-progress' },
+  170: { id: 23, driver: 'Carlos Souza', stop: 3, stopCount: 3, status: 'in-progress' },
+  171: { id: 26, driver: 'Carlos Souza', stop: 2, stopCount: 2, status: 'in-progress' }
+}
+
+const mockDeliveryAttemptData: Record<number, { occurredAt: string, reason?: string, note?: string }> = {
+  141: { occurredAt: 'Hoje às 10:54' },
+  142: { occurredAt: 'Hoje às 10:46', reason: 'Cliente ausente', note: 'Duas tentativas de contato sem resposta.' },
+  161: { occurredAt: 'Hoje às 12:57', reason: 'Endereço não localizado', note: 'Numeração não encontrada na quadra informada.' },
+  162: { occurredAt: 'Hoje às 12:42' },
+  163: { occurredAt: 'Hoje às 12:31', reason: 'Cliente recusou o pedido', note: 'Cliente informou que o pedido chegou fora do horário combinado.' },
+  164: { occurredAt: 'Hoje às 12:18' },
+  165: { occurredAt: 'Hoje às 11:47' },
+  166: { occurredAt: 'Hoje às 11:32' },
+  167: { occurredAt: 'Hoje às 11:16' },
+  168: { occurredAt: 'Hoje às 12:21' }
+}
+
+const mockDeliveryNotes: Record<number, string> = {
+  153: '<p>Entregar na recepção e identificar como pedido corporativo.</p>',
+  156: '<p>Ligar ao chegar. Portão lateral após as 13h.</p>',
+  160: '<p>Não tocar o interfone; deixar com a portaria do bloco B.</p>',
+  169: '<p>Cliente solicitou contato cinco minutos antes da chegada.</p>',
+  171: '<p>Levar a máquina de cartão até a entrada principal.</p>'
+}
+
 function domainStateFor(status: OrderDetailStatus): Pick<OrderDetail, 'allowedActions' | 'cancellationReasons' | 'cancellationPreview'> {
   const effectsByStatus: Partial<Record<OrderDetailStatus, string[]>> = {
     open: [
@@ -323,6 +366,7 @@ function genericItems(order: MockOrder): OrderItem[] {
 function detailFromSummary(order: MockOrder): OrderDetail {
   const customer = customers.find(current => current.name === order.customer || current.phone === order.phone)
   const status = detailStatusFromSummary(order)
+  const isPickup = order.statusLabel.toLocaleLowerCase('pt-BR').includes('retirado')
   const isPacked = order.statusLabel.toLocaleLowerCase('pt-BR').includes('embalad')
   const deliveryAddress = customer?.addresses[0]
   const financialTotal = parseCurrency(order.total)
@@ -330,6 +374,8 @@ function detailFromSummary(order: MockOrder): OrderDetail {
   const currentStatusHistory = status === 'open'
     ? []
     : [{ id: `status-${order.id}`, time: `Hoje ${order.createdAt}`, title: order.statusLabel, actor: 'Ana' }]
+  const assignedRoute = mockRouteAssignments[order.id]
+  const deliveryAttemptData = mockDeliveryAttemptData[order.id]
 
   const operationalState: Partial<OrderDetail> = status === 'in-production'
     ? { productionStartedAt: `Hoje às ${order.createdAt}` }
@@ -339,25 +385,35 @@ function detailFromSummary(order: MockOrder): OrderDetail {
             productionStartedAt: 'Hoje às 09:50',
             packedAt: `Hoje às ${order.createdAt}`,
             packedBy: 'Joana',
+            route: assignedRoute ? { ...assignedRoute } : undefined,
             allowedActions: []
           }
         : { productionStartedAt: 'Hoje às 09:50' }
       : status === 'delivery'
-        ? { packedAt: 'Hoje às 10:32', packedBy: 'Joana', route: { id: 12, driver: 'Carlos Souza', stop: 4, stopCount: 8, status: 'in-progress' } }
-        : status === 'completed'
+        ? { packedAt: 'Hoje às 10:32', packedBy: 'Joana', route: assignedRoute ? { ...assignedRoute } : { id: 12, driver: 'Carlos Souza', stop: 1, stopCount: 1, status: 'in-progress' } }
+        : status === 'completed' && !isPickup
           ? {
               packedAt: 'Hoje às 10:32',
               packedBy: 'Joana',
-              completedAt: `Hoje às ${order.createdAt}`,
-              route: { id: 12, driver: 'Carlos Souza', stop: 4, stopCount: 8, status: 'completed' },
-              deliveryAttempts: [{ id: `attempt-${order.id}`, occurredAt: `Hoje às ${order.createdAt}`, result: 'success', driver: 'Carlos Souza' }]
+              completedAt: deliveryAttemptData?.occurredAt ?? `Hoje às ${order.createdAt}`,
+              route: assignedRoute ? { ...assignedRoute } : { id: 11, driver: 'Mariana Lima', stop: 1, stopCount: 1, status: 'completed' },
+              deliveryAttempts: [{ id: `attempt-${order.id}`, occurredAt: deliveryAttemptData?.occurredAt ?? `Hoje às ${order.createdAt}`, result: 'success', driver: assignedRoute?.driver ?? 'Mariana Lima' }]
             }
+          : status === 'completed'
+            ? { completedAt: `Hoje às ${order.createdAt}` }
           : status === 'failed'
             ? {
                 packedAt: 'Hoje às 12:32',
                 packedBy: 'Joana',
-                route: { id: 12, driver: 'Carlos Souza', stop: 4, stopCount: 8, status: 'in-progress' },
-                deliveryAttempts: [{ id: `attempt-${order.id}`, occurredAt: 'Hoje às 13:12', result: 'failed', reason: 'Cliente ausente', note: 'Interfone sem resposta.', driver: 'Carlos Souza' }]
+                route: assignedRoute ? { ...assignedRoute } : { id: 10, driver: 'Rafael Santos', stop: 1, stopCount: 1, status: 'completed' },
+                deliveryAttempts: [{
+                  id: `attempt-${order.id}`,
+                  occurredAt: deliveryAttemptData?.occurredAt ?? 'Hoje às 13:12',
+                  result: 'failed',
+                  reason: deliveryAttemptData?.reason ?? 'Cliente ausente',
+                  note: deliveryAttemptData?.note ?? 'Interfone sem resposta.',
+                  driver: assignedRoute?.driver ?? 'Rafael Santos'
+                }]
               }
             : status === 'cancelled'
               ? {
@@ -389,6 +445,7 @@ function detailFromSummary(order: MockOrder): OrderDetail {
     deliveryWindow: order.deliveryWindow,
     deliveryFee,
     items: genericItems(order),
+    note: mockDeliveryNotes[order.id],
     paymentCondition: 'cash',
     paymentMethod: 'pix',
     planCreditCount: 0,
@@ -511,6 +568,106 @@ export function markOrderPacked(order: OrderDetail) {
     time: 'Hoje 12:32',
     title: 'Pedido embalado',
     actor: 'Ana'
+  })
+  saveOrderDetail(updated)
+  return updated
+}
+
+export function assignOrderToDeliveryRoute(
+  order: OrderDetail,
+  route: NonNullable<OrderDetail['route']>
+) {
+  if (order.status !== 'packing' || !order.packedAt || order.route)
+    return order
+
+  const updated = cloneOrderDetail(order)
+  updated.route = { ...route }
+  updated.history.unshift({
+    id: `route-${route.id}-${Date.now()}`,
+    time: 'Hoje 12:40',
+    title: `Pedido incluído na rota #${route.id}`,
+    actor: 'Ana'
+  })
+  saveOrderDetail(updated)
+  return updated
+}
+
+export function updatePlannedOrderRoute(
+  order: OrderDetail,
+  route?: NonNullable<OrderDetail['route']>
+) {
+  if (order.status !== 'packing' || !order.packedAt || (order.route && order.route.status !== 'planned'))
+    return order
+
+  const updated = cloneOrderDetail(order)
+  const previousRouteId = updated.route?.id
+  updated.route = route ? { ...route } : undefined
+  updated.history.unshift({
+    id: `route-updated-${Date.now()}-${updated.id}`,
+    time: 'Hoje 12:42',
+    title: route
+      ? `Planejamento atualizado · rota #${route.id}`
+      : `Pedido removido da rota #${previousRouteId ?? '—'}`,
+    actor: 'Ana'
+  })
+  saveOrderDetail(updated)
+  return updated
+}
+
+export function startOrderDelivery(order: OrderDetail) {
+  if (!order.route || order.route.status !== 'planned')
+    return order
+
+  const route = { ...order.route, status: 'in-progress' as const }
+  const updated = cloneOrderDetail(order)
+  replaceDomainState(updated, 'delivery')
+  updated.route = route
+  updated.history.unshift({
+    id: `delivery-started-${Date.now()}`,
+    time: 'Hoje 12:45',
+    title: `Saiu para entrega · rota #${route.id}`,
+    actor: route.driver
+  })
+  saveOrderDetail(updated)
+  return updated
+}
+
+export function recordOrderDelivery(
+  order: OrderDetail,
+  result: DeliveryAttempt['result'],
+  reason?: string,
+  note?: string
+) {
+  if (order.status !== 'delivery' || !order.route)
+    return order
+
+  const route = { ...order.route, status: 'completed' as const }
+  const updated = cloneOrderDetail(order)
+  const occurredAt = 'Hoje às 13:18'
+  const driver = route.driver
+  const attempt: DeliveryAttempt = {
+    id: `attempt-${updated.id}-${Date.now()}`,
+    occurredAt,
+    result,
+    reason: result === 'failed' ? reason : undefined,
+    note: note?.trim() || undefined,
+    driver
+  }
+
+  updated.deliveryAttempts = [...(updated.deliveryAttempts ?? []), attempt]
+  updated.route = route
+  if (result === 'success') {
+    replaceDomainState(updated, 'completed')
+    updated.completedAt = occurredAt
+  }
+  else {
+    replaceDomainState(updated, 'failed')
+  }
+  updated.history.unshift({
+    id: `delivery-${result}-${Date.now()}`,
+    time: 'Hoje 13:18',
+    title: result === 'success' ? 'Entrega concluída' : `Falha na entrega · ${reason ?? 'Motivo não informado'}`,
+    actor: driver
   })
   saveOrderDetail(updated)
   return updated

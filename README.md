@@ -56,3 +56,19 @@ Estados previsíveis podem ser revisados sem alterar a massa local:
 - `?mock=sem-embalagens`: fila sem pedidos aguardando ou embalados.
 - `?mock=sem-resultados`: busca preenchida sem correspondências.
 - `?mock=erro`: falha simulada ao carregar a fila.
+
+## Entregas
+
+A rota `/operacoes/entregas` recebe os pedidos embalados, agrupa as paradas por
+janela e permite atribuir um entregador ativo. Rotas planejadas podem ser
+iniciadas e cada parada registra entrega concluída ou falha, mantendo o pedido
+e seu histórico sincronizados com o restante da operação. Antes do início, a
+rota permite trocar o entregador, adicionar ou remover pedidos da mesma janela,
+reordenar as paradas e excluir o planejamento, devolvendo os pedidos à fila.
+Ao iniciar, o operador revisa a folha da rota em um diálogo e pode imprimi-la;
+rotas em andamento mantêm a ação de reimpressão disponível no cabeçalho.
+
+As rotas demonstrativas usam a chave `ts-operation-delivery-routes-v1` do
+`localStorage` e compartilham os pedidos persistidos pela operação. Estados
+previsíveis podem ser revisados com `?mock=sem-entregas`,
+`?mock=sem-resultados` e `?mock=erro`.
