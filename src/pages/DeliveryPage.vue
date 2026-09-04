@@ -669,7 +669,7 @@ onBeforeUnmount(() => {
                 <span
                   v-if="selectedOrderIds.includes(order.id)"
                   draggable="true"
-                  class="mt-0.5 hidden size-7 shrink-0 cursor-grab items-center justify-center rounded-lg text-slate-400 outline-none transition-colors hover:text-slate-800 active:cursor-grabbing md:flex"
+                  class="desktop-only-flex mt-0.5 size-7 shrink-0 cursor-grab items-center justify-center rounded-lg text-slate-400 outline-none transition-colors hover:text-slate-800 active:cursor-grabbing"
                   title="Arraste para reposicionar"
                   aria-hidden="true"
                   @dragstart="startOrderDrag($event, order.id)"
