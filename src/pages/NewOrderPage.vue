@@ -199,7 +199,7 @@ function saveOrder() {
     discountValue: discount.value,
     discountReason: discount.value ? discountReason.value.trim() : undefined,
     pendingIssues,
-    ...getOrderDomainState('open'),
+    ...getOrderDomainState('open', items.value),
     history: props.mode === 'edit' && existingOrder
       ? [{ id: `updated-${Date.now()}`, time: `Hoje ${time}`, title: 'Pedido alterado', actor: 'Ana' }, ...existingOrder.history]
       : [{ id: `created-${savedOrderId}`, time: `Hoje ${time}`, title: 'Pedido criado', actor: 'Ana' }]

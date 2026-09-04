@@ -1,4 +1,5 @@
 import { getAllOrderDetails, type OrderDetail } from './orderDetail'
+import { contributesToDailyProduction } from '../domain/orderFulfillment'
 
 export interface ProductionWindowNeed {
   window: string
@@ -48,6 +49,8 @@ export function getProductionSnapshot(): ProductionSnapshot {
 
   for (const order of orders) {
     for (const item of order.items) {
+      if (!contributesToDailyProduction(item))
+        continue
       const components = item.effectiveComponents ?? []
       for (const [componentIndex, component] of components.entries()) {
         const key = component.id || normalizedKey(component.name)
@@ -74,10 +77,11 @@ export function getProductionSnapshot(): ProductionSnapshot {
 
   return {
     orderCount: orders.length,
-    mealCount: orders.reduce((total, order) => total + order.items.length, 0),
+    mealCount: orders.reduce((total, order) => total
+      + order.items.filter(contributesToDailyProduction).length, 0),
     inProductionCount: orders.filter(order => order.status === 'in-production').length,
     customizationCount: orders.reduce(
-      (total, order) => total + order.items.filter(item => item.customizations.length > 0).length,
+      (total, order) => total + order.items.filter(item => contributesToDailyProduction(item) && item.customizations.length > 0).length,
       0
     ),
     needs: [...needs.entries()]

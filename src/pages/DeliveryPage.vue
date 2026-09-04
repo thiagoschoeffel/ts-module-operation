@@ -16,6 +16,7 @@ import {
   MenuIcon,
   PageHeader,
   PlusIcon,
+  PrintPreview,
   sanitizeRichText,
   SearchIcon,
   Select,
@@ -604,11 +605,16 @@ onBeforeUnmount(() => {
       @update:open="routePrintOpen = $event">
       <template #trigger><button type="button" class="hidden" tabindex="-1" aria-hidden="true"></button></template>
 
-      <RoutePrintSheet
+      <PrintPreview
         v-if="printRoute"
-        :route="printRoute"
-        :orders="printRouteOrders"
-        class="route-print-preview max-h-[60vh] overflow-y-auto rounded-lg border border-slate-200 p-5" />
+        variant="document"
+        format="A4 · 210 × 297 mm"
+        aria-label="Pré-visualização da folha de rota">
+        <RoutePrintSheet
+          :route="printRoute"
+          :orders="printRouteOrders"
+          class="p-5 sm:p-8" />
+      </PrintPreview>
 
       <template #footer="{ close }">
         <div class="flex flex-wrap items-center justify-between gap-3">

@@ -17,16 +17,21 @@ import {
 } from '@thiagoschoeffel/ts-components'
 import { formatAddressLocation, formatAddressStreet } from '../components/new-order/address'
 import { formatCurrency, paymentConditionOptions, paymentMethodOptions } from '../components/new-order/mockData'
+import { createPackingLabelBundle, fullPackingLabelSelection } from '../domain/packingLabels'
 import {
   cancelOrderDetail,
   confirmOrderDetail,
   getOrderDetail,
   markOrderPacked,
+  recordPackingLabelPrint,
   rescheduleOrderDelivery,
   type OrderAllowedAction,
   type OrderDetail,
   type OrderDetailStatus
 } from '../mocks/orderDetail'
+import { getFrozenStockIssues, previewFrozenOrderAllocations } from '../mocks/frozenOrderStock'
+import { printPackingLabels } from '../services/packingLabelPrinting'
+import type { PackingLabelPrintSelection } from '../types/packingLabels'
 
 const props = defineProps<{ orderId?: string }>()
 const emit = defineEmits<{
@@ -42,12 +47,14 @@ const validationProgress = ref(0)
 const validationComplete = ref(false)
 const confirming = ref(false)
 const confirmationFeedback = ref('')
+const confirmationError = ref('')
 const cancellationOpen = ref(false)
 const cancellationReason = ref('')
 const cancellationDetail = ref('')
 const cancellationSubmitted = ref(false)
 const cancelling = ref(false)
 const packing = ref(false)
+const packingError = ref('')
 const rescheduleOpen = ref(false)
 const rescheduleWindow = ref('')
 const rescheduleReason = ref('Cliente ausente')
@@ -70,6 +77,13 @@ const total = computed(() => Math.max(0,
 ))
 const hasBlockingRestriction = computed(() => order.value?.items.some(item => item.hasRestrictionConflict) ?? false)
 const itemCount = computed(() => order.value?.items.length ?? 0)
+const frozenItems = computed(() => order.value?.items.filter(item => item.fulfillmentSource === 'frozen-stock' && item.frozenStock) ?? [])
+const frozenStockIssues = computed(() => order.value?.status === 'open' ? getFrozenStockIssues(order.value.items) : [])
+const frozenAllocationPreviews = computed(() => {
+  if (!order.value || frozenStockIssues.value.length) return []
+  try { return previewFrozenOrderAllocations(order.value.items) }
+  catch { return [] }
+})
 const sanitizedOrderNote = computed(() => sanitizeRichText(order.value?.note ?? ''))
 function richTextPlainText(value?: string) { return sanitizeRichText(value ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() }
 const paymentConditionLabel = computed(() => paymentConditionOptions.find(option => option.value === order.value?.paymentCondition)?.label)
@@ -87,6 +101,7 @@ const operationalIssues = computed(() => {
     issues.push('Janela de entrega não definida')
   if (hasBlockingRestriction.value)
     issues.push('Restrição alimentar')
+  issues.push(...frozenStockIssues.value)
   return [...new Set(issues)]
 })
 const canConfirm = computed(() => validationComplete.value && operationalIssues.value.length === 0)
@@ -191,6 +206,7 @@ function openConfirmation() {
   validating.value = true
   validationProgress.value = 0
   validationComplete.value = false
+  confirmationError.value = ''
   validationProgressInterval = setInterval(() => {
     validationProgress.value = Math.min(100, validationProgress.value + (100 / 30))
     if (validationProgress.value < 100)
@@ -213,12 +229,31 @@ function confirmOrder(close: () => void) {
   confirmationTimeout = setTimeout(() => {
     if (!order.value)
       return
-    order.value = confirmOrderDetail(order.value)
-    confirming.value = false
-    confirmationFeedback.value = `Pedido #${order.value.id} confirmado`
-    emit('loaded', order.value)
-    close()
+    try {
+      order.value = confirmOrderDetail(order.value)
+      confirmationFeedback.value = `Pedido #${order.value.id} confirmado`
+      emit('loaded', order.value)
+      close()
+    }
+    catch (error) {
+      confirmationError.value = error instanceof Error ? error.message : 'Não foi possível alocar o estoque congelado.'
+      validationComplete.value = false
+    }
+    finally { confirming.value = false }
   }, 650)
+}
+
+function formatFrozenDate(value: string) {
+  return new Intl.DateTimeFormat('pt-BR').format(new Date(`${value}T12:00:00`))
+}
+
+function frozenStatusLabel(status: NonNullable<OrderDetail['items'][number]['frozenStock']>['allocationStatus']) {
+  return {
+    pending: 'Reserva na confirmação',
+    allocated: 'Alocado',
+    returned: 'Estornado ao lote',
+    'manual-review': 'Conferência necessária'
+  }[status]
 }
 
 function openCancellation() {
@@ -245,18 +280,48 @@ function cancelOrder(close: () => void) {
   }, 650)
 }
 
-function markPacked() {
+function packingPrintRecord(selection: PackingLabelPrintSelection, status: 'success' | 'error', errorMessage?: string) {
+  return {
+    id: `packing-print-${Date.now()}`,
+    occurredAt: new Date().toISOString(),
+    responsibleName: 'Ana',
+    dailyItemLabelIds: [...selection.dailyItemLabelIds],
+    includedExternalPackageLabel: selection.includeExternalPackageLabel,
+    status,
+    errorMessage
+  }
+}
+
+async function markPacked() {
   if (!order.value)
     return
+
   packing.value = true
-  actionTimeout = setTimeout(() => {
-    if (!order.value)
-      return
-    order.value = markOrderPacked(order.value)
+  packingError.value = ''
+  confirmationFeedback.value = ''
+  const bundle = createPackingLabelBundle(order.value)
+  const selection = fullPackingLabelSelection(bundle)
+  order.value = markOrderPacked(order.value, bundle)
+  emit('loaded', order.value)
+
+  try {
+    const shouldSimulateFailure = new URLSearchParams(window.location.search).get('mock') === 'impressao-erro'
+    if (shouldSimulateFailure)
+      throw new Error('A impressora demonstrativa não respondeu. Tente novamente pela fila de Embalagem.')
+
+    await printPackingLabels({ bundle, selection })
+    order.value = recordPackingLabelPrint(order.value, packingPrintRecord(selection, 'success'))
+    confirmationFeedback.value = `Pedido #${order.value.id} embalado e etiquetas abertas para impressão`
+  }
+  catch (error) {
+    const message = error instanceof Error ? error.message : 'Não foi possível imprimir as etiquetas.'
+    order.value = recordPackingLabelPrint(order.value, packingPrintRecord(selection, 'error', message))
+    packingError.value = `O pedido foi marcado como embalado, mas as etiquetas não foram impressas. ${message}`
+  }
+  finally {
     packing.value = false
-    confirmationFeedback.value = `Pedido #${order.value.id} marcado como embalado`
     emit('loaded', order.value)
-  }, 550)
+  }
 }
 
 function openReschedule() {
@@ -336,6 +401,17 @@ onBeforeUnmount(() => {
         <template #icon><CheckIcon /></template>
       </Alert>
 
+      <Alert
+        v-if="packingError"
+        class="mb-4"
+        variants="danger"
+        title="Falha na impressão"
+        :description="packingError"
+        closable
+        @close="packingError = ''">
+        <template #icon><TriangleAlertIcon /></template>
+      </Alert>
+
       <div class="ts-responsive-row mb-5 gap-4">
         <div class="flex flex-col items-start gap-2">
           <p class="font-medium text-slate-800">{{ order.customer.name }}</p>
@@ -361,7 +437,7 @@ onBeforeUnmount(() => {
             <Button v-if="hasAction('reschedule')" type="button" @click="openReschedule">Reagendar entrega</Button>
             <Button v-if="hasAction('mark-packed')" type="button" :loading="packing" @click="markPacked">
               <template #icon><PackageCheckIcon /></template>
-              Marcar como embalado
+              Embalado
             </Button>
             <Button v-if="hasAction('cancel')" type="button" variant="danger" @click="openCancellation">Cancelar pedido</Button>
           </div>
@@ -513,8 +589,11 @@ onBeforeUnmount(() => {
                 class="rounded-lg border border-slate-200 bg-white p-4">
                 <div class="flex items-start justify-between gap-4">
                   <div>
-                    <h3 class="font-semibold text-slate-800">{{ item.name }}</h3>
-                    <p v-for="detail in item.details" :key="detail" class="mt-1 text-sm text-slate-500">{{ detail }}</p>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <h3 class="font-semibold text-slate-800">{{ item.name }}</h3>
+                      <Badge v-if="item.fulfillmentSource === 'frozen-stock'" variant="info">Congelado</Badge>
+                    </div>
+                    <div v-for="detail in item.details" :key="detail" class="mt-1 space-y-1 text-sm text-slate-500 [&_a]:text-blue-600 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-slate-300 [&_blockquote]:pl-2 [&_em]:italic [&_h2]:text-base [&_h2]:font-semibold [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-5 [&_s]:line-through [&_strong]:font-semibold [&_u]:underline [&_ul]:list-disc [&_ul]:pl-5" v-html="sanitizeRichText(detail)" />
                   </div>
                   <p class="shrink-0 font-semibold text-slate-800">{{ formatCurrency(item.price) }}</p>
                 </div>
@@ -527,6 +606,21 @@ onBeforeUnmount(() => {
                     <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Adicional</p>
                     <p v-for="addition in item.additions" :key="addition" class="mt-1 text-sm text-slate-600">{{ addition }}</p>
                   </div>
+                </div>
+                <div v-if="item.frozenStock" class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <p class="font-medium text-slate-800">Estoque congelado</p>
+                    <Badge :variant="item.frozenStock.allocationStatus === 'manual-review' ? 'warning' : item.frozenStock.allocationStatus === 'returned' ? 'neutral' : 'info'">
+                      {{ frozenStatusLabel(item.frozenStock.allocationStatus) }}
+                    </Badge>
+                  </div>
+                  <p v-if="item.frozenStock.allocationStatus === 'pending'" class="mt-2 text-slate-600">A disponibilidade será conferida novamente e o lote será definido por FEFO na confirmação.</p>
+                  <ul v-else-if="item.frozenStock.allocations.length" class="mt-2 space-y-1 text-slate-600">
+                    <li v-for="allocation in item.frozenStock.allocations" :key="allocation.lotId">
+                      {{ allocation.quantity }} un. · lote {{ allocation.lotId }} · validade {{ formatFrozenDate(allocation.expiresOn) }}
+                    </li>
+                  </ul>
+                  <p v-if="item.frozenStock.allocationStatus === 'manual-review'" class="mt-2 font-medium text-amber-700">Não retornar ao saldo vendável sem conferência humana da cadeia fria.</p>
                 </div>
                 <Alert
                   v-if="order.customer.restriction"
@@ -661,12 +755,29 @@ onBeforeUnmount(() => {
             <div v-else class="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-emerald-800">
               <p class="flex items-center gap-2 font-medium"><CheckIcon class="size-4" /> Capacidade disponível</p>
               <p class="flex items-center gap-2 font-medium"><CheckIcon class="size-4" /> Restrições verificadas</p>
+              <p v-if="frozenItems.length" class="flex items-center gap-2 font-medium"><CheckIcon class="size-4" /> Estoque congelado disponível</p>
+            </div>
+            <div v-if="frozenAllocationPreviews.length" class="space-y-3 border-t border-slate-200 pt-4">
+              <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500">Alocação FEFO prevista</h3>
+              <div v-for="preview in frozenAllocationPreviews" :key="preview.itemId" class="rounded-lg border border-slate-200 p-3 text-sm">
+                <p class="font-medium text-slate-800">{{ preview.name }} · {{ preview.presentation }}</p>
+                <p v-for="allocation in preview.allocations" :key="allocation.lotId" class="mt-1 text-slate-600">
+                  {{ allocation.quantity }} un. do lote {{ allocation.lotId }} · validade {{ formatFrozenDate(allocation.expiresOn) }}
+                </p>
+              </div>
             </div>
             <div class="space-y-2 border-t border-slate-200 pt-4">
               <p><span class="font-medium text-slate-800">Plano:</span> {{ order.planCreditCount }} créditos serão consumidos</p>
               <p><span class="font-medium text-slate-800">Financeiro:</span> {{ formatCurrency(total) }} será devido</p>
             </div>
           </template>
+          <Alert
+            v-if="confirmationError"
+            variants="danger"
+            title="Pedido não confirmado"
+            :description="confirmationError">
+            <template #icon><TriangleAlertIcon /></template>
+          </Alert>
         </div>
         <template #footer="{ close }">
           <div class="flex justify-end">

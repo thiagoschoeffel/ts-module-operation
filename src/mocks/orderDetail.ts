@@ -1,6 +1,8 @@
 import { customers, formatCurrency, offers } from '../components/new-order/mockData'
 import type { CustomerAddress, OrderItem, PaymentCondition, PaymentMethod } from '../components/new-order/types'
+import type { PackingLabelBundle, PackingLabelPrintRecord } from '../types/packingLabels'
 import { getPublishedMenu } from './dailyMenu'
+import { allocateFrozenOrderItems, handleFrozenCancellation } from './frozenOrderStock'
 import { mockOrders, type MockOrder, type OrderStatus } from './orders'
 
 export type OrderDetailStatus =
@@ -91,6 +93,8 @@ export interface OrderDetail {
   productionStartedAt?: string
   packedAt?: string
   packedBy?: string
+  packingLabels?: PackingLabelBundle
+  packingLabelPrintHistory?: PackingLabelPrintRecord[]
   route?: {
     id: number
     driver: string
@@ -166,7 +170,7 @@ const mockDeliveryNotes: Record<number, string> = {
   171: '<p>Levar a máquina de cartão até a entrada principal.</p>'
 }
 
-function domainStateFor(status: OrderDetailStatus): Pick<OrderDetail, 'allowedActions' | 'cancellationReasons' | 'cancellationPreview'> {
+function domainStateFor(status: OrderDetailStatus, items: OrderItem[] = []): Pick<OrderDetail, 'allowedActions' | 'cancellationReasons' | 'cancellationPreview'> {
   const effectsByStatus: Partial<Record<OrderDetailStatus, string[]>> = {
     open: [
       'O pedido será marcado como cancelado.',
@@ -205,14 +209,23 @@ function domainStateFor(status: OrderDetailStatus): Pick<OrderDetail, 'allowedAc
     failed: ['reschedule', 'cancel'],
     cancelled: []
   }
-  const effects = effectsByStatus[status]
+  const hasFrozenItems = items.some(item => item.fulfillmentSource === 'frozen-stock')
+  const effects = effectsByStatus[status] ? [...effectsByStatus[status]!] : undefined
+  if (effects && hasFrozenItems) {
+    if (status === 'open') effects.push('Nenhum estoque congelado foi reservado.')
+    else if (status === 'confirmed') effects.push('As unidades congeladas serão devolvidas automaticamente aos mesmos lotes.')
+    else if (['in-production', 'packing', 'failed'].includes(status))
+      effects.push('As unidades congeladas exigirão conferência humana e não voltarão automaticamente ao estoque vendável.')
+  }
   return {
     allowedActions: actions[status],
     cancellationReasons,
     cancellationPreview: effects ? {
       stageLabel: statusLabel[status],
       warning: ['in-production', 'packing'].includes(status)
-        ? 'Este pedido já entrou em produção. O cancelamento operacional não garante estorno financeiro integral.'
+        ? hasFrozenItems
+          ? 'O pedido já avançou na operação. Os congelados exigirão conferência humana antes de qualquer retorno ao estoque vendável.'
+          : 'Este pedido já entrou em produção. O cancelamento operacional não garante estorno financeiro integral.'
         : undefined,
       effects
     } : undefined
@@ -220,7 +233,7 @@ function domainStateFor(status: OrderDetailStatus): Pick<OrderDetail, 'allowedAc
 }
 
 function replaceDomainState(order: OrderDetail, status: OrderDetailStatus) {
-  const state = domainStateFor(status)
+  const state = domainStateFor(status, order.items)
   order.status = status
   order.allowedActions = [...state.allowedActions]
   order.cancellationReasons = state.cancellationReasons.map(reason => ({ ...reason }))
@@ -229,8 +242,8 @@ function replaceDomainState(order: OrderDetail, status: OrderDetailStatus) {
     : undefined
 }
 
-export function getOrderDomainState(status: OrderDetailStatus) {
-  return structuredClone(domainStateFor(status))
+export function getOrderDomainState(status: OrderDetailStatus, items: OrderItem[] = []) {
+  return structuredClone(domainStateFor(status, items))
 }
 
 const storageKey = 'ts-operation-order-details-v1'
@@ -269,6 +282,7 @@ const featuredOrder: OrderDetail = {
       details: ['Tradicional · Estrogonofe de frango', 'Salada P · Salada de folhas', 'Fruta · Banana'],
       customizations: ['Sem arroz'],
       additions: ['Proteína extra · + R$ 5,00'],
+      fulfillmentSource: 'daily-production',
       effectiveComponents: [
         { id: 'prod-1004', name: 'Estrogonofe de frango', unit: 'porções', quantity: 1, source: 'producible' },
         { id: 'side-small-salad', name: 'Salada de folhas', unit: 'porções', quantity: 1, source: 'offer-component' },
@@ -285,6 +299,7 @@ const featuredOrder: OrderDetail = {
       details: ['Low Carb · Frango grelhado'],
       customizations: ['Arroz substituído por legumes refogados'],
       additions: [],
+      fulfillmentSource: 'daily-production',
       effectiveComponents: [
         { id: 'prod-1003', name: 'Frango grelhado', unit: 'porções', quantity: 1, source: 'producible' }
       ],
@@ -338,9 +353,39 @@ function genericItems(order: MockOrder): OrderItem[] {
   const financialTotal = parseCurrency(order.total)
   const deliveryFee = order.deliveryWindow && financialTotal >= 4 ? 4 : 0
   const itemTotal = Math.max(0, financialTotal - deliveryFee)
-  const basePrice = order.itemCount ? itemTotal / order.itemCount : 0
+  const hasDemonstrativeFrozenItem = [129, 145].includes(order.id)
+  const dailyItemCount = order.itemCount - (hasDemonstrativeFrozenItem ? 1 : 0)
+  const basePrice = dailyItemCount ? Math.max(0, itemTotal - (hasDemonstrativeFrozenItem ? 29 : 0)) / dailyItemCount : 0
 
   return Array.from({ length: order.itemCount }, (_, index) => {
+    if ([129, 145].includes(order.id) && index === 0) {
+      return {
+        id: 'order-129-item-frozen',
+        offerId: 'oferta-congelados',
+        name: 'Congelados',
+        price: 29,
+        details: ['Estrogonofe de frango · 300 g'],
+        customizations: [],
+        additions: [],
+        fulfillmentSource: 'frozen-stock' as const,
+        frozenStock: {
+          configurationId: 'cong-1001',
+          producibleItemId: 'prod-1004',
+          producibleName: 'Estrogonofe de frango',
+          presentation: '300 g',
+          unitPrice: 29,
+          allocationStatus: order.id === 129 ? 'allocated' as const : 'pending' as const,
+          allocations: order.id === 129 ? [{
+              lotId: 'lote-2026-0814-a',
+              manufacturedOn: '2026-06-14',
+              expiresOn: '2026-09-12',
+              quantity: 1
+            }] : []
+        },
+        effectiveComponents: [],
+        hasRestrictionConflict: false
+      }
+    }
     const offer = offers[index % offers.length]
     const menu = getPublishedMenu()
     const availableDishes = menu?.options.filter(option => option.availability === 'available') ?? []
@@ -368,6 +413,7 @@ function genericItems(order: MockOrder): OrderItem[] {
       details: details.length ? details : [offer.name],
       customizations: order.id === 133 && index === 0 ? ['Sem arroz'] : [],
       additions: [],
+      fulfillmentSource: 'daily-production',
       effectiveComponents: [
         ...(dish ? [{
           id: dish.producibleId,
@@ -409,6 +455,7 @@ function detailFromSummary(order: MockOrder): OrderDetail {
     : [{ id: `status-${order.id}`, time: `Hoje ${order.createdAt}`, title: order.statusLabel, actor: 'Ana' }]
   const assignedRoute = mockRouteAssignments[order.id]
   const deliveryAttemptData = mockDeliveryAttemptData[order.id]
+  const items = genericItems(order)
 
   const operationalState: Partial<OrderDetail> = status === 'in-production'
     ? { productionStartedAt: `Hoje às ${order.createdAt}` }
@@ -478,7 +525,7 @@ function detailFromSummary(order: MockOrder): OrderDetail {
     deliveryAddress: deliveryAddress ? { ...deliveryAddress, id: `order-${order.id}-delivery-snapshot` } : undefined,
     deliveryWindow: order.deliveryWindow,
     deliveryFee,
-    items: genericItems(order),
+    items,
     note: mockDeliveryNotes[order.id],
     paymentCondition: 'cash',
     paymentMethod: 'pix',
@@ -487,7 +534,7 @@ function detailFromSummary(order: MockOrder): OrderDetail {
     financialCreditValue: 0,
     discountValue: 0,
     pendingIssues: pendingIssuesFromSummary(order),
-    ...domainStateFor(status),
+    ...domainStateFor(status, items),
     ...operationalState,
     history: [
       ...currentStatusHistory,
@@ -501,9 +548,14 @@ function readStoredOrders(): OrderDetail[] {
     const stored = window.localStorage.getItem(storageKey)
     const parsed = stored ? JSON.parse(stored) as OrderDetail[] : []
     return parsed.map(order => {
-      const fallbackState = domainStateFor(order.status)
+      const normalizedItems = (order.items ?? []).map(item => ({
+        ...item,
+        fulfillmentSource: item.fulfillmentSource ?? 'daily-production' as const
+      }))
+      const fallbackState = domainStateFor(order.status, normalizedItems)
       return {
         ...order,
+        items: normalizedItems,
         paymentCondition: order.paymentCondition ?? 'cash',
         paymentMethod: order.paymentMethod ?? 'pix',
         discountValue: order.discountValue ?? 0,
@@ -533,7 +585,7 @@ function writeStoredOrders(orders: OrderDetail[]) {
 }
 
 export function cloneOrderDetail(order: OrderDetail): OrderDetail {
-  return structuredClone(order)
+  return JSON.parse(JSON.stringify(order)) as OrderDetail
 }
 
 export function getOrderDetail(orderId: string | number): OrderDetail | undefined {
@@ -554,6 +606,7 @@ export function saveOrderDetail(order: OrderDetail) {
 
 export function confirmOrderDetail(order: OrderDetail) {
   const updated = cloneOrderDetail(order)
+  updated.items = allocateFrozenOrderItems(updated.items)
   replaceDomainState(updated, 'confirmed')
   updated.readyForReview = false
   updated.confirmedAt = 'Hoje às 11:46 por Ana'
@@ -573,6 +626,9 @@ export function cancelOrderDetail(order: OrderDetail, reasonValue: string, detai
     return order
 
   const updated = cloneOrderDetail(order)
+  const hasAllocatedFrozenItems = updated.items.some(item => item.frozenStock?.allocationStatus === 'allocated')
+  if (hasAllocatedFrozenItems)
+    updated.items = handleFrozenCancellation(updated.items, updated.status === 'confirmed')
   const reason = updated.cancellationReasons.find(option => option.value === reasonValue)?.label ?? reasonValue
   updated.cancellation = {
     reason,
@@ -593,13 +649,14 @@ export function cancelOrderDetail(order: OrderDetail, reasonValue: string, detai
   return updated
 }
 
-export function markOrderPacked(order: OrderDetail) {
+export function markOrderPacked(order: OrderDetail, packingLabels?: PackingLabelBundle) {
   if (!order.allowedActions.includes('mark-packed'))
     return order
 
   const updated = cloneOrderDetail(order)
   updated.packedAt = 'Hoje às 12:32'
   updated.packedBy = 'Ana'
+  updated.packingLabels = packingLabels ?? updated.packingLabels
   updated.allowedActions = updated.allowedActions.filter(action => action !== 'mark-packed')
   updated.history.unshift({
     id: `packed-${Date.now()}`,
@@ -607,6 +664,20 @@ export function markOrderPacked(order: OrderDetail) {
     title: 'Pedido embalado',
     actor: 'Ana'
   })
+  saveOrderDetail(updated)
+  return updated
+}
+
+export function savePackingLabelSnapshot(order: OrderDetail, packingLabels: PackingLabelBundle) {
+  const updated = cloneOrderDetail(order)
+  updated.packingLabels = packingLabels
+  saveOrderDetail(updated)
+  return updated
+}
+
+export function recordPackingLabelPrint(order: OrderDetail, record: PackingLabelPrintRecord) {
+  const updated = cloneOrderDetail(order)
+  updated.packingLabelPrintHistory = [record, ...(updated.packingLabelPrintHistory ?? [])]
   saveOrderDetail(updated)
   return updated
 }

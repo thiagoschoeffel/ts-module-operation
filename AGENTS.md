@@ -40,6 +40,8 @@ Se houver ambiguidade real de negócio, não invente regra.
 
 Decisão confirmada: a validade de congelados é de **90 dias corridos após a fabricação**. Centralize o cálculo no domínio, teste viradas de mês/ano e não recalcule lotes históricos.
 
+Regra de sequência confirmada: a API só volta a ser implementada depois que o frontend estiver consolidado. Até lá, conclua fluxos, estados, contratos de interface e validações com mocks e adapters locais; não antecipe endpoints, persistência ou casos de uso no `ts-api`. O backend existente permanece congelado como scaffold e não define o ritmo nem os contratos finais do frontend.
+
 ---
 
 ## 2. Inspeção obrigatória
@@ -90,7 +92,8 @@ Etiquetas são contextuais:
 
 ```text
 produto congelado → Congelados / lote
-entrega            → Embalagem / Pedido
+item do dia        → Embalagem / Pedido
+pacote kraft       → Embalagem / Pedido
 ```
 
 Não crie remote separado para tela/entidade isolada sem justificativa concreta.
@@ -285,11 +288,14 @@ Fluxo desejado:
 
 ```text
 conferir visualmente
-→ imprimir etiqueta externa quando necessário
-→ Embalado
+→ clicar em Embalado
+→ imprimir uma etiqueta por unidade da produção do dia ainda sem etiqueta
+→ imprimir uma etiqueta externa do pacote kraft
 ```
 
 Não exigir checklist item a item como regra de negócio.
+
+Congelados reutilizam a etiqueta aplicada na produção para estoque; não imprimir duplicata automática na Embalagem.
 
 ### Congelados
 
@@ -392,6 +398,8 @@ Também:
 
 - valide query strings e `retorno`;
 - sanitize rich-text antes de renderizar;
+- use `rich-text` em todo `Textarea` dos aplicativos e preserve a formatação sanitizada em toda exibição correspondente;
+- converta rich-text para texto simples somente em busca, validação ou outro uso não visual justificado;
 - não exponha tokens/dados pessoais em logs;
 - não trate botão oculto como autorização.
 

@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import {
   Alert,
+  Badge,
   Button,
   Card,
   CheckIcon,
@@ -12,10 +13,12 @@ import {
   EmptyState,
   InfoIcon,
   RadioGroup,
+  sanitizeRichText,
   TriangleAlertIcon
 } from '@thiagoschoeffel/ts-components'
 import { formatCurrency, offers, riceSubstitutionOptions } from './mockData'
 import { getPublishedMenu } from '../../mocks/dailyMenu'
+import { getFrozenOrderConfigurations } from '../../mocks/frozenOrderStock'
 import type { Customer, Offer, OrderItem } from './types'
 
 const props = defineProps<{
@@ -27,7 +30,7 @@ const emit = defineEmits<{
 }>()
 
 const drawerOpen = ref(false)
-const drawerView = ref<'offers' | 'configuration'>('offers')
+const drawerView = ref<'offers' | 'configuration' | 'frozen'>('offers')
 const selectedOffer = ref<Offer>()
 const editingItemId = ref<string>()
 const selectedDish = ref('traditional')
@@ -38,8 +41,21 @@ const riceChoice = ref('remove')
 const riceSubstitution = ref(riceSubstitutionOptions[0].value)
 const feedback = ref('')
 const removeConfirmationId = ref<string>()
+const selectedFrozenConfigurationId = ref('')
 
 const publishedMenu = getPublishedMenu()
+const frozenConfigurations = computed(() => getFrozenOrderConfigurations())
+const frozenConfigurationOptions = computed(() => frozenConfigurations.value.map(configuration => ({
+  value: configuration.id,
+  label: `${configuration.producibleName} · ${configuration.presentation}`,
+  description: configuration.availableQuantity > 0
+    ? `${configuration.availableQuantity} disponíveis · ${formatCurrency(configuration.unitPrice)}`
+    : `Sem estoque disponível · ${formatCurrency(configuration.unitPrice)}`,
+  disabled: configuration.availableQuantity === 0
+})))
+const selectedFrozenConfiguration = computed(() => frozenConfigurations.value.find(configuration => configuration.id === selectedFrozenConfigurationId.value))
+const frozenRestrictionConflict = computed(() => props.customer?.restriction === 'Lactose'
+  && selectedFrozenConfiguration.value?.producibleName.toLocaleLowerCase('pt-BR').includes('estrogonofe'))
 const dishOptions = computed(() => (publishedMenu?.options ?? []).map(option => ({
   value: option.id,
   producibleId: option.producibleId,
@@ -87,6 +103,7 @@ function addSimpleOffer(offer: Offer) {
     price: offer.price,
     details: [offer.description],
     additions: [],
+    fulfillmentSource: 'daily-production',
     effectiveComponents: offer.componentTypes.map((name, index) => ({
       id: `${offer.id}-component-${index + 1}`,
       name,
@@ -108,6 +125,49 @@ function configureOffer(offer: Offer) {
   drawerView.value = 'configuration'
 }
 
+function configureFrozenItem(item?: OrderItem) {
+  editingItemId.value = item?.id
+  selectedOffer.value = undefined
+  selectedFrozenConfigurationId.value = item?.frozenStock?.configurationId
+    ?? frozenConfigurations.value.find(configuration => configuration.availableQuantity > 0)?.id
+    ?? ''
+  drawerView.value = 'frozen'
+  drawerOpen.value = true
+}
+
+function saveFrozenItem() {
+  const configuration = frozenConfigurations.value.find(current => current.id === selectedFrozenConfigurationId.value)
+  if (!configuration || configuration.availableQuantity < 1 || frozenRestrictionConflict.value) return
+  const item: OrderItem = {
+    id: editingItemId.value ?? `item-${Date.now()}`,
+    offerId: 'oferta-congelados',
+    name: 'Congelados',
+    price: configuration.unitPrice,
+    details: [`${configuration.producibleName} · ${configuration.presentation}`],
+    additions: [],
+    fulfillmentSource: 'frozen-stock',
+    frozenStock: {
+      configurationId: configuration.id,
+      producibleItemId: configuration.producibleItemId,
+      producibleName: configuration.producibleName,
+      presentation: configuration.presentation,
+      unitPrice: configuration.unitPrice,
+      allocationStatus: 'pending',
+      allocations: []
+    },
+    effectiveComponents: [],
+    customizations: [],
+    hasRestrictionConflict: false
+  }
+  const items = editingItemId.value
+    ? props.modelValue.map(current => current.id === editingItemId.value ? item : current)
+    : [...props.modelValue, item]
+  emit('update:modelValue', items)
+  feedback.value = editingItemId.value ? 'Congelado atualizado' : 'Congelado adicionado'
+  drawerView.value = 'offers'
+  editingItemId.value = undefined
+}
+
 function saveConfiguredItem() {
   if (!selectedOffer.value)
     return
@@ -126,6 +186,7 @@ function saveConfiguredItem() {
       ...(hasComponent(selectedOffer.value, 'Salada P') ? ['Salada P · Salada de folhas'] : [])
     ],
     additions: selectedAddons.value.map(addon => `${addon.name} · + ${formatCurrency(addon.price)}`),
+    fulfillmentSource: 'daily-production',
     effectiveComponents: [
       ...(dish ? [{
         id: dish.producibleId,
@@ -174,6 +235,10 @@ function saveConfiguredItem() {
 }
 
 function editItem(item: OrderItem) {
+  if (item.fulfillmentSource === 'frozen-stock') {
+    configureFrozenItem(item)
+    return
+  }
   const offer = offers.find((current) => current.id === item.offerId)
   if (!offer?.requiresConfiguration)
     return
@@ -194,7 +259,8 @@ function editItem(item: OrderItem) {
 }
 
 function isConfigurableItem(item: OrderItem) {
-  return offers.some(offer => offer.id === item.offerId && offer.requiresConfiguration)
+  return item.fulfillmentSource === 'frozen-stock'
+    || offers.some(offer => offer.id === item.offerId && offer.requiresConfiguration)
 }
 
 function hasComponent(offer: Offer, component: string) {
@@ -215,6 +281,7 @@ function handleDrawerOpen(open: boolean) {
   if (!open) {
     drawerView.value = 'offers'
     editingItemId.value = undefined
+    selectedFrozenConfigurationId.value = ''
     feedback.value = ''
   }
 }
@@ -228,7 +295,7 @@ function handleDrawerOpen(open: boolean) {
     <template #header>
       <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Itens do pedido</h2>
       <p class="mt-1 text-sm text-slate-500">
-        {{ props.customer ? 'Adicione as ofertas disponíveis no cardápio de hoje.' : 'Selecione um cliente para adicionar itens.' }}
+        {{ props.customer ? 'Adicione ofertas do cardápio ou uma preparação congelada disponível.' : 'Selecione um cliente para adicionar itens.' }}
       </p>
     </template>
     <div v-if="props.customer" class="space-y-3">
@@ -236,7 +303,7 @@ function handleDrawerOpen(open: boolean) {
         v-if="props.modelValue.length === 0"
         :bordered="false"
         title="Nenhum item adicionado"
-        description="Escolha uma oferta do cardápio de hoje.">
+        description="Escolha uma oferta do cardápio ou uma preparação congelada.">
         <template #icon><ClipboardListIcon /></template>
       </EmptyState>
 
@@ -246,8 +313,11 @@ function handleDrawerOpen(open: boolean) {
         class="rounded-lg border border-slate-200 bg-white p-4">
         <div class="flex items-start justify-between gap-4">
           <div>
-            <h3 class="font-semibold text-slate-800">{{ item.name }}</h3>
-            <p v-for="detail in item.details" :key="detail" class="mt-1 text-sm text-slate-500">{{ detail }}</p>
+            <div class="flex flex-wrap items-center gap-2">
+              <h3 class="font-semibold text-slate-800">{{ item.name }}</h3>
+              <Badge v-if="item.fulfillmentSource === 'frozen-stock'" variant="info">Congelado</Badge>
+            </div>
+            <div v-for="detail in item.details" :key="detail" class="mt-1 space-y-1 text-sm text-slate-500 [&_a]:text-blue-600 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-slate-300 [&_blockquote]:pl-2 [&_em]:italic [&_h2]:text-base [&_h2]:font-semibold [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-5 [&_s]:line-through [&_strong]:font-semibold [&_u]:underline [&_ul]:list-disc [&_ul]:pl-5" v-html="sanitizeRichText(detail)" />
           </div>
           <p class="shrink-0 font-semibold text-slate-800">{{ formatCurrency(item.price) }}</p>
         </div>
@@ -282,7 +352,7 @@ function handleDrawerOpen(open: boolean) {
         side="right"
         size="large"
         :title="drawerView === 'offers' ? 'Adicionar item' : editingItemId ? 'Editar item' : 'Configurar item'"
-        :description="drawerView === 'offers' ? 'Ofertas disponíveis hoje' : selectedOffer?.name"
+        :description="drawerView === 'offers' ? 'Ofertas disponíveis para este pedido' : drawerView === 'frozen' ? 'Escolha uma apresentação com estoque vendável.' : selectedOffer?.name"
         @update:open="handleDrawerOpen">
         <template #trigger>
           <Button type="button" size="small" variant="primary">
@@ -298,11 +368,25 @@ function handleDrawerOpen(open: boolean) {
               <EmptyState v-if="offers.length === 0" :bordered="false" title="Nenhuma oferta disponível" description="O cardápio de hoje não está publicado ou não possui ofertas disponíveis.">
                 <template #icon><ClipboardListIcon /></template>
               </EmptyState>
+              <article class="rounded-lg border border-slate-200 p-4">
+                <div class="flex items-start justify-between gap-4">
+                  <div>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <h3 class="font-semibold text-slate-800">Congelados</h3>
+                      <Badge variant="info">Estoque</Badge>
+                    </div>
+                    <p class="mt-1 text-xs text-slate-500">Escolha uma preparação congelada disponível. O preço depende da apresentação.</p>
+                  </div>
+                </div>
+                <Button class="mt-4" type="button" size="small" :disabled="!frozenConfigurations.some(configuration => configuration.availableQuantity > 0)" @click="configureFrozenItem()">
+                  Configurar
+                </Button>
+              </article>
               <article v-for="offer in offers" :key="offer.id" class="rounded-lg border border-slate-200 p-4">
                 <div class="flex items-start justify-between gap-4">
                   <div>
                     <h3 class="font-semibold text-slate-800">{{ offer.name }}</h3>
-                    <p class="mt-1 text-xs text-slate-500">{{ offer.description }}</p>
+                    <div class="mt-1 space-y-1 text-xs text-slate-500 [&_a]:text-blue-600 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-slate-300 [&_blockquote]:pl-2 [&_em]:italic [&_h2]:text-sm [&_h2]:font-semibold [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-4 [&_s]:line-through [&_strong]:font-semibold [&_u]:underline [&_ul]:list-disc [&_ul]:pl-4" v-html="sanitizeRichText(offer.description)" />
                   </div>
                   <p class="shrink-0 font-semibold text-slate-800">{{ formatCurrency(offer.price) }}</p>
                 </div>
@@ -315,6 +399,41 @@ function handleDrawerOpen(open: boolean) {
                   {{ offer.requiresConfiguration ? 'Configurar' : 'Adicionar' }}
                 </Button>
               </article>
+            </div>
+
+            <div v-else-if="drawerView === 'frozen'" class="space-y-6 pt-2">
+              <button
+                type="button"
+                class="inline-flex cursor-pointer items-center gap-1 text-sm font-medium text-slate-400 transition-colors hover:text-slate-800"
+                @click="drawerView = 'offers'">
+                <ChevronLeftIcon class="size-4" /> Voltar para ofertas
+              </button>
+
+              <Alert
+                variants="info"
+                title="Alocação na confirmação"
+                description="O saldo é conferido novamente e os lotes são alocados por vencimento mais próximo somente ao confirmar o pedido.">
+                <template #icon><InfoIcon /></template>
+              </Alert>
+
+              <RadioGroup
+                v-model="selectedFrozenConfigurationId"
+                label="Preparação e apresentação"
+                :options="frozenConfigurationOptions" />
+
+              <Alert
+                v-if="frozenRestrictionConflict"
+                variants="warning"
+                title="Restrição alimentar"
+                :description="`${props.customer.name} possui restrição a lactose. A preparação congelada selecionada contém ingrediente marcado com lactose.`">
+                <template #icon><TriangleAlertIcon /></template>
+              </Alert>
+
+              <EmptyState
+                v-if="frozenConfigurationOptions.length === 0"
+                :bordered="false"
+                title="Nenhum congelado disponível"
+                description="Não há configurações ativas com saldo vendável." />
             </div>
 
             <div v-else-if="selectedOffer" class="space-y-6 pt-2">
@@ -394,9 +513,12 @@ function handleDrawerOpen(open: boolean) {
           <div class="flex items-center justify-between gap-4">
             <div>
               <p class="text-xs text-slate-500">Total do item</p>
-              <p class="font-semibold text-slate-900">{{ formatCurrency(itemTotal) }}</p>
+              <p class="font-semibold text-slate-900">{{ formatCurrency(drawerView === 'frozen' ? frozenConfigurations.find(configuration => configuration.id === selectedFrozenConfigurationId)?.unitPrice ?? 0 : itemTotal) }}</p>
             </div>
-            <Button type="button" :disabled="hasRestrictionConflict" @click="saveConfiguredItem">
+            <Button v-if="drawerView === 'frozen'" type="button" :disabled="!selectedFrozenConfigurationId || frozenRestrictionConflict" @click="saveFrozenItem">
+              {{ editingItemId ? 'Salvar alterações' : 'Adicionar ao pedido' }}
+            </Button>
+            <Button v-else type="button" :disabled="hasRestrictionConflict" @click="saveConfiguredItem">
               {{ editingItemId ? 'Salvar alterações' : 'Adicionar ao pedido' }}
             </Button>
           </div>

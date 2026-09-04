@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port 4174 --strictPort",
+    "test": "node --test src/domain/*.test.mjs",
     "build": "vue-tsc --noEmit && vite build"
   },
   "dependencies": {
     "@internationalized/date": "^3.12.4",
-    "@thiagoschoeffel/ts-components": "^0.7.4",
+    "@thiagoschoeffel/ts-components": "^0.7.8",
     "vue": "^3.5.42"
   },
   "devDependencies": {

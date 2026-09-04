@@ -45,10 +45,39 @@ export interface OrderItem {
   price: number
   details: string[]
   additions: string[]
+  fulfillmentSource: 'daily-production' | 'frozen-stock'
+  frozenStock?: FrozenOrderItemSnapshot
   /** Snapshot operacional usado por Produção; textos de apresentação não são fonte de cálculo. */
   effectiveComponents: OrderItemComponent[]
   customizations: string[]
   hasRestrictionConflict: boolean
+}
+
+export interface FrozenOrderItemSnapshot {
+  configurationId: string
+  producibleItemId: string
+  producibleName: string
+  presentation: string
+  unitPrice: number
+  allocationStatus: 'pending' | 'allocated' | 'returned' | 'manual-review'
+  allocations: FrozenOrderLotAllocation[]
+}
+
+export interface FrozenOrderLotAllocation {
+  lotId: string
+  manufacturedOn: string
+  expiresOn: string
+  quantity: number
+}
+
+export interface FrozenOrderConfiguration {
+  id: string
+  producibleItemId: string
+  producibleName: string
+  presentation: string
+  unitPrice: number
+  availableQuantity: number
+  nextExpiration?: string
 }
 
 export interface OrderItemComponent {

@@ -10,10 +10,6 @@ const props = defineProps<{
 
 const printDate = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'full' }).format(new Date(`${props.route.date}T12:00:00`))
 
-function richTextPlainText(value?: string) {
-  return sanitizeRichText(value ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
-}
-
 function fullAddress(order: OrderDetail) {
   const value = order.deliveryAddress
   if (!value)
@@ -58,7 +54,10 @@ function fullAddress(order: OrderDetail) {
             <p class="mt-2 text-sm font-medium">{{ fullAddress(order) }}</p>
             <p class="mt-1 text-sm text-slate-600">Telefone: {{ order.customer.phone }}</p>
             <p v-if="order.customer.restriction" class="mt-2 text-sm font-semibold">Atenção: {{ order.customer.restriction }}</p>
-            <p v-if="order.note" class="mt-2 text-sm"><span class="font-semibold">Observação:</span> {{ richTextPlainText(order.note) }}</p>
+            <div v-if="order.note" class="mt-2 text-sm">
+              <p class="font-semibold">Observação:</p>
+              <div class="mt-1 space-y-1 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-slate-400 [&_blockquote]:pl-2 [&_em]:italic [&_h2]:text-base [&_h2]:font-semibold [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-5 [&_s]:line-through [&_strong]:font-semibold [&_u]:underline [&_ul]:list-disc [&_ul]:pl-5" v-html="sanitizeRichText(order.note)" />
+            </div>
             <div class="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-sm font-medium">
               <span>□ Entregue</span><span>□ Falha</span><span>Horário: ____:____</span>
             </div>

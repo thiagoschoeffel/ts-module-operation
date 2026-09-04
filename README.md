@@ -51,6 +51,37 @@ marcado como embalado; restrições e personalizações recebem destaque visual.
 conclusão registra responsável e horário no pedido e mantém os volumes
 embalados disponíveis para a futura etapa de roteirização.
 
+No ambiente demonstrativo, ao clicar em **Embalado**, o operador confere todas
+as etiquetas em um diálogo com rolagem interna. Em uma estação configurada no
+modo `zebra`, o mesmo clique pula o diálogo e envia diretamente uma etiqueta
+para cada item da produção do dia e uma etiqueta externa para o pacote kraft;
+congelados mantêm a etiqueta aplicada na entrada do lote. A reimpressão sempre
+preserva a conferência e a seleção explícita das etiquetas.
+
+### Impressão direta em Zebra USB
+
+O serviço de impressão possui suporte preparado para Zebra Browser Print e gera
+ZPL em 100 × 50 mm para impressoras de 203 ou 300 dpi. Configure o ambiente com:
+
+```dotenv
+VITE_PACKING_PRINT_MODE=zebra
+VITE_ZEBRA_BROWSER_PRINT_SCRIPT=/vendor/BrowserPrint.min.js
+VITE_ZEBRA_DPI=203
+```
+
+- `zebra`: exige o aplicativo Zebra Browser Print instalado na estação e envia
+  o ZPL diretamente para a impressora USB padrão, sem abrir a impressão do
+  Chrome;
+- `browser`: mantém a janela de impressão usada na demonstração;
+- `auto` ou valor ausente: usa Zebra quando a biblioteca estiver disponível e
+  recorre ao navegador nos demais ambientes.
+
+A biblioteca JavaScript deve ser obtida no pacote oficial do
+[Zebra Browser Print](https://www.zebra.com/us/en/support-downloads/software/printer-software/browser-print.html)
+e disponibilizada pela aplicação no endereço configurado. Quando o equipamento
+for adquirido, confirme o dpi do modelo e cadastre-o como impressora padrão no
+Browser Print da estação.
+
 Estados previsíveis podem ser revisados sem alterar a massa local:
 
 - `?mock=sem-embalagens`: fila sem pedidos aguardando ou embalados.
