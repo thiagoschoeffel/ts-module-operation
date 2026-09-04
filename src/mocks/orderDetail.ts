@@ -32,6 +32,7 @@ export interface CancellationRecord {
 
 export interface DeliveryAttempt {
   id: string
+  routeId: number
   occurredAt: string
   result: 'success' | 'failed'
   reason?: string
@@ -397,7 +398,7 @@ function detailFromSummary(order: MockOrder): OrderDetail {
               packedBy: 'Joana',
               completedAt: deliveryAttemptData?.occurredAt ?? `Hoje às ${order.createdAt}`,
               route: assignedRoute ? { ...assignedRoute } : { id: 11, driver: 'Mariana Lima', stop: 1, stopCount: 1, status: 'completed' },
-              deliveryAttempts: [{ id: `attempt-${order.id}`, occurredAt: deliveryAttemptData?.occurredAt ?? `Hoje às ${order.createdAt}`, result: 'success', driver: assignedRoute?.driver ?? 'Mariana Lima' }]
+              deliveryAttempts: [{ id: `attempt-${order.id}`, routeId: assignedRoute?.id ?? 11, occurredAt: deliveryAttemptData?.occurredAt ?? `Hoje às ${order.createdAt}`, result: 'success', driver: assignedRoute?.driver ?? 'Mariana Lima' }]
             }
           : status === 'completed'
             ? { completedAt: `Hoje às ${order.createdAt}` }
@@ -408,6 +409,7 @@ function detailFromSummary(order: MockOrder): OrderDetail {
                 route: assignedRoute ? { ...assignedRoute } : { id: 10, driver: 'Rafael Santos', stop: 1, stopCount: 1, status: 'completed' },
                 deliveryAttempts: [{
                   id: `attempt-${order.id}`,
+                  routeId: assignedRoute?.id ?? 10,
                   occurredAt: deliveryAttemptData?.occurredAt ?? 'Hoje às 13:12',
                   result: 'failed',
                   reason: deliveryAttemptData?.reason ?? 'Cliente ausente',
@@ -474,6 +476,10 @@ function readStoredOrders(): OrderDetail[] {
         paymentMethod: order.paymentMethod ?? 'pix',
         discountValue: order.discountValue ?? 0,
         pendingIssues: order.pendingIssues ?? [],
+        deliveryAttempts: order.deliveryAttempts?.map(attempt => ({
+          ...attempt,
+          routeId: attempt.routeId ?? order.route?.id ?? 0
+        })),
         allowedActions: order.allowedActions ?? fallbackState.allowedActions,
         cancellationReasons: order.cancellationReasons ?? fallbackState.cancellationReasons,
         cancellationPreview: order.cancellationPreview ?? fallbackState.cancellationPreview
@@ -615,7 +621,7 @@ export function updatePlannedOrderRoute(
 }
 
 export function startOrderDelivery(order: OrderDetail) {
-  if (!order.route || order.route.status !== 'planned')
+  if (order.status !== 'packing' || !order.packedAt || !order.route || order.route.status !== 'planned')
     return order
 
   const route = { ...order.route, status: 'in-progress' as const }
@@ -647,6 +653,7 @@ export function recordOrderDelivery(
   const driver = route.driver
   const attempt: DeliveryAttempt = {
     id: `attempt-${updated.id}-${Date.now()}`,
+    routeId: route.id,
     occurredAt,
     result,
     reason: result === 'failed' ? reason : undefined,
@@ -688,7 +695,10 @@ export function rescheduleOrderDelivery(order: OrderDetail, newWindow: string, r
     occurredAt: 'Hoje às 13:20'
   }
   updated.deliveryWindow = newWindow
-  updated.allowedActions = updated.allowedActions.filter(action => action !== 'reschedule')
+  updated.route = undefined
+  updated.completedAt = undefined
+  replaceDomainState(updated, 'packing')
+  updated.allowedActions = updated.allowedActions.filter(action => action !== 'mark-packed')
   updated.history.unshift({
     id: `rescheduled-${Date.now()}`,
     time: 'Hoje 13:20',

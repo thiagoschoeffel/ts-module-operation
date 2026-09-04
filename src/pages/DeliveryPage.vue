@@ -2,7 +2,6 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   Alert,
-  ArrowRightIcon,
   Badge,
   Button,
   Card,
@@ -15,6 +14,7 @@ import {
   EmptyState,
   Input,
   MenuIcon,
+  PageHeader,
   PlusIcon,
   sanitizeRichText,
   SearchIcon,
@@ -28,7 +28,7 @@ import {
 } from '@thiagoschoeffel/ts-components'
 import {
   createDeliveryRoute,
-  deleteDeliveryRoute,
+  cancelDeliveryRoute,
   finishDeliveryStop,
   getDeliveryDrivers,
   getDeliverySnapshot,
@@ -64,6 +64,7 @@ const activeFilter = ref<DeliveryFilter>(validFilters.has(requestedFilter) ? req
 const search = ref(params.get('busca') ?? (mockScenario === 'sem-resultados' ? 'Rota inexistente' : ''))
 const hasError = ref(mockScenario === 'erro')
 const feedback = ref('')
+const feedbackVariant = ref<'success' | 'danger'>('success')
 const routeDrawerOpen = ref(false)
 const editingRouteId = ref<number>()
 const routeSubmitted = ref(false)
@@ -72,7 +73,7 @@ const selectedWindow = ref('')
 const selectedOrderIds = ref<number[]>([])
 const draggedOrderId = ref<number>()
 const dragOverOrderId = ref<number>()
-const deleteConfirmationId = ref<number>()
+const cancelConfirmationId = ref<number>()
 const routePrintOpen = ref(false)
 const printRouteId = ref<number>()
 const printMode = ref<'start' | 'reprint'>('start')
@@ -148,14 +149,14 @@ const orderedSelectableOrders = computed(() => {
 const routeCounts = computed(() => ({
   planning: routes.value.filter(route => route.status === 'planned').length,
   'in-progress': routes.value.filter(route => route.status === 'in-progress').length,
-  completed: routes.value.filter(route => route.status === 'completed').length
+  completed: routes.value.filter(route => route.status === 'completed' || route.status === 'cancelled').length
 }))
 const activeContent = computed(() => sectionContent[activeTab.value])
 
 const normalizedSearch = computed(() => search.value.trim().toLocaleLowerCase('pt-BR'))
 const searchedRoutes = computed(() => routes.value.filter((route) => {
   const expectedStatus: DeliveryRouteStatus = activeTab.value === 'planning' ? 'planned' : activeTab.value
-  if (route.status !== expectedStatus)
+  if (route.status !== expectedStatus && !(activeTab.value === 'completed' && route.status === 'cancelled'))
     return false
   if (!normalizedSearch.value)
     return true
@@ -293,6 +294,7 @@ function saveRoute(close: () => void) {
     : createDeliveryRoute(driver, selectedOrderIds.value)
   if (!route)
     return
+  feedbackVariant.value = 'success'
   feedback.value = editingRouteId.value
     ? `Rota #${route.id} atualizada com ${route.orderIds.length} ${route.orderIds.length === 1 ? 'parada' : 'paradas'}`
     : `Rota #${route.id} criada com ${route.orderIds.length} ${route.orderIds.length === 1 ? 'parada' : 'paradas'}`
@@ -301,11 +303,12 @@ function saveRoute(close: () => void) {
   close()
 }
 
-function confirmDeleteRoute(route: DeliveryRoute) {
-  if (!deleteDeliveryRoute(route.id))
+function confirmCancelRoute(route: DeliveryRoute) {
+  if (!cancelDeliveryRoute(route.id))
     return
-  deleteConfirmationId.value = undefined
-  feedback.value = `Rota #${route.id} excluída e pedidos devolvidos ao planejamento`
+  cancelConfirmationId.value = undefined
+  feedbackVariant.value = 'success'
+  feedback.value = `Rota #${route.id} cancelada e pedidos devolvidos ao planejamento`
   refresh()
 }
 
@@ -323,7 +326,15 @@ function startRoute(close: () => void) {
   const route = printRoute.value
   if (!route || route.status !== 'planned')
     return
-  startDeliveryRoute(route.id)
+  const startedRoute = startDeliveryRoute(route.id)
+  if (!startedRoute) {
+    feedbackVariant.value = 'danger'
+    feedback.value = `A rota #${route.id} não foi iniciada porque um ou mais pedidos deixaram de estar aptos. Revise o planejamento.`
+    close()
+    refresh()
+    return
+  }
+  feedbackVariant.value = 'success'
   feedback.value = `Rota #${route.id} iniciada por ${route.driverName}`
   close()
   updateTab('in-progress')
@@ -346,6 +357,7 @@ function saveStop(close: () => void) {
     || (stopNoteRequired.value && !richTextPlainText(stopNote.value)))
     return
   finishDeliveryStop(activeStop.value.routeId, activeStop.value.orderId, stopResult.value, stopReason.value, stopNote.value)
+  feedbackVariant.value = 'success'
   feedback.value = stopResult.value === 'success'
     ? `Entrega do pedido #${activeStop.value.orderId} concluída`
     : `Falha registrada no pedido #${activeStop.value.orderId}`
@@ -363,7 +375,7 @@ function routeOrders(route: DeliveryRoute) {
 }
 
 function routeMatchesWindow(route: DeliveryRoute, window: Exclude<DeliveryFilter, 'todos'>) {
-  return routeOrders(route).some(order => order.deliveryWindow === window)
+  return route.deliveryWindow === window
 }
 
 function orderStatus(order: OrderDetail) {
@@ -373,8 +385,20 @@ function orderStatus(order: OrderDetail) {
   return { label: 'Planejada', variant: 'neutral' as const }
 }
 
+function orderStatusInRoute(order: OrderDetail, route: DeliveryRoute) {
+  if (route.status === 'cancelled')
+    return { label: 'Não executada', variant: 'neutral' as const }
+  if (route.status === 'completed') {
+    const attempt = order.deliveryAttempts?.find(item => item.routeId === route.id)
+    if (attempt?.result === 'success') return { label: 'Entregue', variant: 'success' as const }
+    if (attempt?.result === 'failed') return { label: 'Falha', variant: 'danger' as const }
+  }
+  return orderStatus(order)
+}
+
 function routeStatus(route: DeliveryRoute) {
   if (route.status === 'completed') return { label: 'Concluída', variant: 'success' as const }
+  if (route.status === 'cancelled') return { label: 'Cancelada', variant: 'danger' as const }
   if (route.status === 'in-progress') return { label: 'Em rota', variant: 'info' as const }
   return { label: 'Planejada', variant: 'neutral' as const }
 }
@@ -440,19 +464,9 @@ onBeforeUnmount(() => {
     <template #content>
       <div class="pt-4 md:flex md:h-full md:min-h-0 md:flex-col">
         <div class="flex shrink-0 flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <header class="flex w-full min-w-0 items-start gap-3 text-slate-800">
-            <TruckIcon class="size-8 shrink-0" :stroke-width="1.75" aria-hidden="true" />
-            <div class="min-w-0 flex-1 overflow-hidden">
-              <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap sm:items-start sm:overflow-hidden">
-                <h1 class="m-0 shrink-0 text-xl font-bold leading-none sm:text-2xl">Entregas</h1>
-                <span class="inline-flex shrink-0 items-center gap-2 sm:min-w-0 sm:shrink">
-                  <ArrowRightIcon class="size-5 shrink-0 text-slate-400" aria-hidden="true" />
-                  <span class="text-xl font-bold leading-tight sm:min-w-0 sm:text-2xl">{{ activeContent.title }}</span>
-                </span>
-              </div>
-              <p class="mt-2 text-sm leading-snug text-slate-400">{{ activeContent.subtitle }}</p>
-            </div>
-          </header>
+          <PageHeader :title="`Entregas — ${activeContent.title}`" :subtitle="activeContent.subtitle">
+            <template #icon><TruckIcon class="size-8" :stroke-width="1.75" /></template>
+          </PageHeader>
           <Button v-if="activeTab === 'planning'" type="button" @click="openRouteDrawer">
             <template #icon><PlusIcon /></template>
             Nova rota
@@ -460,8 +474,8 @@ onBeforeUnmount(() => {
         </div>
 
   <section class="mt-6 md:min-h-0 md:flex-1" aria-label="Entregas do dia">
-    <Alert v-if="feedback" class="mb-4" variants="success" :description="feedback" closable @close="feedback = ''">
-      <template #icon><CheckIcon /></template>
+    <Alert v-if="feedback" class="mb-4" :variants="feedbackVariant" :description="feedback" closable @close="feedback = ''">
+      <template #icon><CheckIcon v-if="feedbackVariant === 'success'" /><TriangleAlertIcon v-else /></template>
     </Alert>
 
     <div class="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
@@ -529,32 +543,32 @@ onBeforeUnmount(() => {
                 <Badge :variant="routeStatus(route).variant">{{ routeStatus(route).label }}</Badge>
               </div>
               <p class="mt-1 font-medium text-slate-700">{{ route.driverName }}</p>
-              <p class="text-xs text-slate-500">{{ route.orderIds.length }} {{ route.orderIds.length === 1 ? 'parada' : 'paradas' }} · criada {{ route.createdAt.toLocaleLowerCase('pt-BR') }}</p>
+              <p class="text-xs text-slate-500">{{ route.deliveryWindow }} · {{ route.orderIds.length }} {{ route.orderIds.length === 1 ? 'parada' : 'paradas' }} · criada {{ route.createdAt.toLocaleLowerCase('pt-BR') }}</p>
             </div>
-            <div v-if="route.status === 'planned' && deleteConfirmationId === route.id" class="flex flex-wrap items-center justify-end gap-2">
-              <span class="text-xs font-medium text-slate-600">Remover rota?</span>
-              <Button size="small" variant="secondary" @click="deleteConfirmationId = undefined">Cancelar</Button>
-              <Button size="small" variant="danger" @click="confirmDeleteRoute(route)">Sim</Button>
+            <div v-if="route.status === 'planned' && cancelConfirmationId === route.id" class="flex flex-wrap items-center justify-end gap-2">
+              <span class="text-xs font-medium text-slate-600">Cancelar rota?</span>
+              <Button size="small" variant="secondary" @click="cancelConfirmationId = undefined">Manter rota</Button>
+              <Button size="small" variant="danger" @click="confirmCancelRoute(route)">Sim</Button>
             </div>
             <div v-else-if="route.status === 'planned'" class="flex shrink-0 flex-wrap items-center justify-end gap-2">
               <Button size="small" variant="secondary" @click="openEditRoute(route)">Editar</Button>
-              <Button size="small" variant="danger" @click="deleteConfirmationId = route.id">Remover</Button>
+              <Button size="small" variant="danger" @click="cancelConfirmationId = route.id">Cancelar rota</Button>
             </div>
             <Button v-else-if="route.status === 'in-progress'" size="small" variant="secondary" @click="openRoutePrint(route, 'reprint')">Reimprimir</Button>
           </div>
         </template>
 
         <ol class="divide-y divide-slate-100">
-          <li v-for="order in routeOrders(route)" :key="order.id" class="py-4 first:pt-0 last:pb-0">
+          <li v-for="(order, orderIndex) in routeOrders(route)" :key="order.id" class="py-4 first:pt-0 last:pb-0">
             <div class="flex items-start gap-3">
-              <span class="flex size-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold tabular-nums text-slate-600">{{ order.route?.stop }}</span>
+              <span class="flex size-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold tabular-nums text-slate-600">{{ orderIndex + 1 }}</span>
               <div class="min-w-0 flex-1">
                 <div class="flex flex-wrap items-center justify-between gap-2">
                   <p class="font-semibold text-slate-800">{{ order.customer.name }} · #{{ order.id }}</p>
-                  <Badge :variant="orderStatus(order).variant">{{ orderStatus(order).label }}</Badge>
+                  <Badge :variant="orderStatusInRoute(order, route).variant">{{ orderStatusInRoute(order, route).label }}</Badge>
                 </div>
                 <p class="mt-1 text-sm text-slate-600">{{ address(order) }}</p>
-                <p class="mt-1 text-xs text-slate-500">{{ order.deliveryWindow }} · {{ order.customer.phone }}</p>
+                <p class="mt-1 text-xs text-slate-500">{{ route.deliveryWindow }} · {{ order.customer.phone }}</p>
                 <div v-if="route.status === 'in-progress' && order.status === 'delivery'" class="mt-3 flex flex-wrap gap-2">
                   <Button size="small" variant="success" @click="openStop(route, order, 'success')">Marcar entregue</Button>
                   <Button size="small" variant="secondary" @click="openStop(route, order, 'failed')">Registrar falha</Button>
@@ -574,8 +588,8 @@ onBeforeUnmount(() => {
             </Button>
           </div>
         </template>
-        <template v-else-if="route.startedAt || route.completedAt" #footer>
-          <p class="text-sm text-slate-500">{{ route.completedAt ? `Concluída ${route.completedAt.toLocaleLowerCase('pt-BR')}` : `Iniciada ${route.startedAt?.toLocaleLowerCase('pt-BR')}` }}</p>
+        <template v-else-if="route.startedAt || route.completedAt || route.cancelledAt" #footer>
+          <p class="text-sm text-slate-500">{{ route.status === 'cancelled' ? `Cancelada ${route.cancelledAt?.toLocaleLowerCase('pt-BR')} por ${route.cancelledBy}` : route.completedAt ? `Concluída ${route.completedAt.toLocaleLowerCase('pt-BR')}` : `Iniciada ${route.startedAt?.toLocaleLowerCase('pt-BR')}` }}</p>
         </template>
       </Card>
     </div>

@@ -8,8 +8,9 @@ import {
   type DeliveryAttempt,
   type OrderDetail
 } from './orderDetail'
+import { localDateIso } from './dailyMenu'
 
-export type DeliveryRouteStatus = 'planned' | 'in-progress' | 'completed'
+export type DeliveryRouteStatus = 'planned' | 'in-progress' | 'completed' | 'cancelled'
 
 export interface DeliveryDriverOption {
   id: string
@@ -23,10 +24,14 @@ export interface DeliveryRoute {
   driverId?: string
   driverName: string
   status: DeliveryRouteStatus
+  date: string
+  deliveryWindow: string
   orderIds: number[]
   createdAt: string
   startedAt?: string
   completedAt?: string
+  cancelledAt?: string
+  cancelledBy?: string
 }
 
 export interface DeliverySnapshot {
@@ -95,6 +100,8 @@ function derivedRoutes(orders: OrderDetail[]) {
       driverId: metadata?.driverId,
       driverName: orderedRouteOrders[0]?.route?.driver ?? 'Entregador não informado',
       status: planned ? 'planned' : pending ? 'in-progress' : 'completed',
+      date: localDateIso(),
+      deliveryWindow: orderedRouteOrders[0]?.deliveryWindow ?? 'Não informada',
       orderIds: orderedRouteOrders.map(order => order.id),
       createdAt: metadata?.createdAt ?? 'Hoje 10:25',
       startedAt: planned ? undefined : metadata?.startedAt ?? 'Hoje 10:40',
@@ -105,18 +112,21 @@ function derivedRoutes(orders: OrderDetail[]) {
 
 function allRoutes(orders: OrderDetail[]) {
   const routes = new Map(derivedRoutes(orders).map(route => [route.id, route]))
-  for (const route of readStoredRoutes())
-    routes.set(route.id, route)
+  const ordersById = new Map(orders.map(order => [order.id, order]))
+  for (const route of readStoredRoutes()) {
+    const firstOrder = route.orderIds.map(id => ordersById.get(id)).find(Boolean)
+    routes.set(route.id, {
+      ...route,
+      date: route.date ?? localDateIso(),
+      deliveryWindow: route.deliveryWindow ?? firstOrder?.deliveryWindow ?? 'Não informada'
+    })
+  }
   return [...routes.values()].sort((first, second) => second.id - first.id)
 }
 
 function saveRoute(route: DeliveryRoute) {
   const routes = readStoredRoutes().filter(current => current.id !== route.id)
   writeStoredRoutes([structuredClone(route), ...routes])
-}
-
-function removeRoute(routeId: number) {
-  writeStoredRoutes(readStoredRoutes().filter(route => route.id !== routeId))
 }
 
 export function getDeliveryDrivers(): DeliveryDriverOption[] {
@@ -150,7 +160,8 @@ export function createDeliveryRoute(driver: DeliveryDriverOption, orderIds: numb
   const orders = orderIds
     .map(id => snapshot.ordersById.get(id))
     .filter((order): order is OrderDetail => Boolean(order && snapshot.available.some(available => available.id === order.id)))
-  if (!orders.length)
+  const deliveryWindow = orders[0]?.deliveryWindow
+  if (!orders.length || orders.length !== orderIds.length || !deliveryWindow || orders.some(order => order.deliveryWindow !== deliveryWindow))
     return undefined
 
   const routeId = Math.max(0, ...snapshot.routes.map(route => route.id)) + 1
@@ -159,6 +170,8 @@ export function createDeliveryRoute(driver: DeliveryDriverOption, orderIds: numb
     driverId: driver.id,
     driverName: driver.name,
     status: 'planned',
+    date: localDateIso(),
+    deliveryWindow,
     orderIds: orders.map(order => order.id),
     createdAt: 'Hoje 12:40'
   }
@@ -182,14 +195,14 @@ export function updateDeliveryRoute(routeId: number, driver: DeliveryDriverOptio
   const currentOrders = route.orderIds
     .map(id => snapshot.ordersById.get(id))
     .filter((order): order is OrderDetail => Boolean(order))
-  const deliveryWindow = currentOrders[0]?.deliveryWindow
+  const deliveryWindow = route.deliveryWindow
   const eligibleOrders = getAllOrderDetails().filter(order => order.status === 'packing'
     && Boolean(order.packedAt)
     && order.deliveryWindow === deliveryWindow
     && (!order.route || order.route.id === routeId))
   const eligibleById = new Map(eligibleOrders.map(order => [order.id, order]))
   const selectedOrders = orderIds.map(id => eligibleById.get(id)).filter((order): order is OrderDetail => Boolean(order))
-  if (!selectedOrders.length)
+  if (!selectedOrders.length || selectedOrders.length !== orderIds.length)
     return undefined
 
   const selectedIds = new Set(selectedOrders.map(order => order.id))
@@ -212,7 +225,7 @@ export function updateDeliveryRoute(routeId: number, driver: DeliveryDriverOptio
   return updated
 }
 
-export function deleteDeliveryRoute(routeId: number) {
+export function cancelDeliveryRoute(routeId: number) {
   const snapshot = getDeliverySnapshot()
   const route = snapshot.routes.find(current => current.id === routeId)
   if (!route || route.status !== 'planned')
@@ -222,7 +235,12 @@ export function deleteDeliveryRoute(routeId: number) {
     if (order)
       updatePlannedOrderRoute(order)
   })
-  removeRoute(routeId)
+  saveRoute({
+    ...route,
+    status: 'cancelled',
+    cancelledAt: 'Hoje 12:42',
+    cancelledBy: 'Ana'
+  })
   return true
 }
 
@@ -230,13 +248,23 @@ export function startDeliveryRoute(routeId: number) {
   const snapshot = getDeliverySnapshot()
   const route = snapshot.routes.find(current => current.id === routeId)
   if (!route || route.status !== 'planned')
-    return
-  route.orderIds.forEach((id) => {
-    const order = getOrderDetail(id)
-    if (order)
-      startOrderDelivery(order)
-  })
-  saveRoute({ ...route, status: 'in-progress', startedAt: 'Hoje 12:45' })
+    return undefined
+
+  const orders = route.orderIds.map(id => getOrderDetail(id))
+  const driverIsActive = getDeliveryDrivers().some(driver => driver.id === route.driverId && driver.active)
+  const eligibleOrders = orders.filter((order): order is OrderDetail => Boolean(order
+    && order.status === 'packing'
+    && Boolean(order.packedAt)
+    && order.deliveryWindow === route.deliveryWindow
+    && order.route?.id === route.id
+    && order.route.status === 'planned'))
+  if (!driverIsActive || eligibleOrders.length === 0 || eligibleOrders.length !== route.orderIds.length)
+    return undefined
+
+  eligibleOrders.forEach(startOrderDelivery)
+  const startedRoute: DeliveryRoute = { ...route, status: 'in-progress', startedAt: 'Hoje 12:45' }
+  saveRoute(startedRoute)
+  return startedRoute
 }
 
 export function finishDeliveryStop(

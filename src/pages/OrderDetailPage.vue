@@ -95,6 +95,7 @@ const canCancel = computed(() => Boolean(
   && (cancellationReason.value !== 'other' || richTextPlainText(cancellationDetail.value))
 ))
 const canReschedule = computed(() => Boolean(rescheduleWindow.value && richTextPlainText(rescheduleReason.value)))
+const failedDeliveryAttempts = computed(() => order.value?.deliveryAttempts?.filter(attempt => attempt.result === 'failed') ?? [])
 const rescheduleWindowOptions = computed(() => ['11:00–12:00', '12:00–13:00', '13:00–14:00', '14:00–15:00']
   .filter(window => window !== order.value?.deliveryWindow)
   .map(window => ({ value: window, label: window })))
@@ -412,13 +413,14 @@ onBeforeUnmount(() => {
             </div>
           </Card>
 
-          <Card v-else-if="order.status === 'failed'">
-            <template #header><h2 class="text-xs font-semibold uppercase tracking-wider text-red-600">Entrega não concluída</h2></template>
-            <div v-if="order.deliveryAttempts?.length" class="space-y-4">
-              <div v-for="attempt in order.deliveryAttempts" :key="attempt.id" class="grid gap-4 sm:grid-cols-2">
+          <Card v-if="failedDeliveryAttempts.length">
+            <template #header><h2 class="text-xs font-semibold uppercase tracking-wider text-red-600">Falhas de entrega</h2></template>
+            <div class="space-y-4">
+              <div v-for="attempt in failedDeliveryAttempts" :key="attempt.id" class="grid gap-4 sm:grid-cols-2">
                 <div><p class="text-xs font-medium uppercase tracking-wide text-slate-400">Tentativa</p><p class="mt-1 font-medium text-slate-800">{{ attempt.occurredAt }}</p></div>
                 <div><p class="text-xs font-medium uppercase tracking-wide text-slate-400">Motivo</p><p class="mt-1 font-medium text-red-700">{{ attempt.reason }}</p></div>
                 <div><p class="text-xs font-medium uppercase tracking-wide text-slate-400">Entregador</p><p class="mt-1 text-slate-700">{{ attempt.driver }}</p></div>
+                <div><p class="text-xs font-medium uppercase tracking-wide text-slate-400">Rota</p><p class="mt-1 text-slate-700">#{{ attempt.routeId }}</p></div>
                 <div v-if="attempt.note"><p class="text-xs font-medium uppercase tracking-wide text-slate-400">Observação</p><div class="mt-1 space-y-2 whitespace-pre-line text-slate-700 [&_a]:text-blue-600 [&_a]:underline [&_blockquote]:border-l-3 [&_blockquote]:border-slate-300 [&_blockquote]:pl-3 [&_em]:italic [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-6 [&_s]:line-through [&_strong]:font-semibold [&_u]:underline [&_ul]:list-disc [&_ul]:pl-6" v-html="sanitizeRichText(attempt.note)" /></div>
               </div>
             </div>

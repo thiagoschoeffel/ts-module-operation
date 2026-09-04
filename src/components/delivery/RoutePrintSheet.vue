@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import { Badge, sanitizeRichText } from '@thiagoschoeffel/ts-components'
 import type { DeliveryRoute } from '../../mocks/delivery'
 import type { OrderDetail } from '../../mocks/orderDetail'
@@ -9,8 +8,7 @@ const props = defineProps<{
   orders: OrderDetail[]
 }>()
 
-const windows = computed(() => [...new Set(props.orders.map(order => order.deliveryWindow).filter(Boolean))].join(' · '))
-const printDate = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'full' }).format(new Date())
+const printDate = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'full' }).format(new Date(`${props.route.date}T12:00:00`))
 
 function richTextPlainText(value?: string) {
   return sanitizeRichText(value ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
@@ -38,24 +36,24 @@ function fullAddress(order: OrderDetail) {
         <h2 class="mt-1 text-2xl font-bold">Folha de rota #{{ route.id }}</h2>
         <p class="mt-1 text-sm text-slate-600">{{ printDate }}</p>
       </div>
-      <Badge :variant="route.status === 'in-progress' ? 'info' : 'neutral'">{{ route.status === 'in-progress' ? 'Em rota' : 'Planejada' }}</Badge>
+      <Badge :variant="route.status === 'in-progress' ? 'info' : route.status === 'completed' ? 'success' : route.status === 'cancelled' ? 'danger' : 'neutral'">{{ route.status === 'in-progress' ? 'Em rota' : route.status === 'completed' ? 'Concluída' : route.status === 'cancelled' ? 'Cancelada' : 'Planejada' }}</Badge>
     </header>
 
     <dl class="grid gap-x-6 gap-y-3 border-b border-slate-300 py-4 text-sm sm:grid-cols-2">
       <div><dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Entregador</dt><dd class="mt-1 font-semibold">{{ route.driverName }}</dd></div>
-      <div><dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Janelas</dt><dd class="mt-1 font-semibold">{{ windows || 'Não informada' }}</dd></div>
+      <div><dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Janela</dt><dd class="mt-1 font-semibold">{{ route.deliveryWindow }}</dd></div>
       <div><dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Paradas</dt><dd class="mt-1 font-semibold">{{ orders.length }}</dd></div>
       <div><dt class="text-xs font-semibold uppercase tracking-wide text-slate-500">Início</dt><dd class="mt-1 font-semibold">{{ route.startedAt ?? '____:____' }}</dd></div>
     </dl>
 
     <ol class="divide-y divide-slate-300">
-      <li v-for="order in orders" :key="`print-${order.id}`" class="break-inside-avoid py-4">
+      <li v-for="(order, orderIndex) in orders" :key="`print-${order.id}`" class="break-inside-avoid py-4">
         <div class="flex items-start gap-4">
-          <span class="flex size-8 shrink-0 items-center justify-center rounded-full border-2 border-slate-900 text-sm font-bold">{{ order.route?.stop }}</span>
+          <span class="flex size-8 shrink-0 items-center justify-center rounded-full border-2 border-slate-900 text-sm font-bold">{{ orderIndex + 1 }}</span>
           <div class="min-w-0 flex-1">
             <div class="flex items-start justify-between gap-4">
               <div><h3 class="font-bold">{{ order.customer.name }}</h3><p class="text-sm text-slate-600">Pedido #{{ order.id }} · {{ order.items.length }} {{ order.items.length === 1 ? 'volume' : 'volumes' }}</p></div>
-              <p class="shrink-0 text-sm font-semibold">{{ order.deliveryWindow }}</p>
+              <p class="shrink-0 text-sm font-semibold">{{ route.deliveryWindow }}</p>
             </div>
             <p class="mt-2 text-sm font-medium">{{ fullAddress(order) }}</p>
             <p class="mt-1 text-sm text-slate-600">Telefone: {{ order.customer.phone }}</p>

@@ -64,9 +64,12 @@ janela e permite atribuir um entregador ativo. Rotas planejadas podem ser
 iniciadas e cada parada registra entrega concluída ou falha, mantendo o pedido
 e seu histórico sincronizados com o restante da operação. Antes do início, a
 rota permite trocar o entregador, adicionar ou remover pedidos da mesma janela,
-reordenar as paradas e excluir o planejamento, devolvendo os pedidos à fila.
+reordenar as paradas e cancelar o planejamento, devolvendo os pedidos à fila sem
+apagar o histórico da rota.
 Ao iniciar, o operador revisa a folha da rota em um diálogo e pode imprimi-la;
 rotas em andamento mantêm a ação de reimpressão disponível no cabeçalho.
+Quando uma entrega falha, o pedido preserva a tentativa anterior e pode ser
+reagendado no detalhe para retornar à fila de uma nova rota.
 
 As rotas demonstrativas usam a chave `ts-operation-delivery-routes-v1` do
 `localStorage` e compartilham os pedidos persistidos pela operação. Estados
