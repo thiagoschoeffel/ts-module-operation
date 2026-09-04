@@ -18,6 +18,7 @@ import OrderSummary from '../components/new-order/OrderSummary.vue'
 import { customers, formatCurrency, getDefaultDeliveryWindow, offers, paymentConditionOptions, paymentMethodOptions } from '../components/new-order/mockData'
 import type { Customer, CustomerAddress, OrderItem, PaymentCondition, PaymentMethod } from '../components/new-order/types'
 import { getOrderDetail, getOrderDomainState, nextOrderId, saveOrderDetail, type OrderDetail } from '../mocks/orderDetail'
+import { getCapacitySnapshot } from '../mocks/capacity'
 
 const props = withDefaults(defineProps<{
   mode?: 'create' | 'edit'
@@ -103,6 +104,7 @@ const total = computed(() => Math.max(0, amountBeforeFinancialCredit.value - app
 const paymentConditionLabel = computed(() => paymentConditionOptions.find(option => option.value === paymentCondition.value)?.label)
 const paymentMethodLabel = computed(() => paymentMethodOptions.find(option => option.value === paymentMethod.value)?.label)
 const paymentDueDateIso = computed(() => paymentDueDate.value?.toString())
+const capacity = computed(() => getCapacitySnapshot(items.value, new URLSearchParams(window.location.search).get('mock') ?? undefined))
 
 watch(() => customer.value?.id, () => {
   address.value = customer.value?.addresses.length === 1 ? { ...customer.value.addresses[0] } : undefined
@@ -336,6 +338,9 @@ onBeforeUnmount(() => {
           :saving="saving"
           :show-validation="showValidation"
           :save-label="props.mode === 'edit' ? 'Salvar alterações' : 'Salvar pedido'"
+          :capacity-used="capacity.used"
+          :capacity-limit="capacity.limit"
+          :daily-production-demand="capacity.requested"
           @save="saveOrder" />
       </aside>
     </div>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Alert, Button, Card, CheckIcon, TriangleAlertIcon } from '@thiagoschoeffel/ts-components'
+import { Alert, Button, Card, CheckIcon, InfoIcon, Progress, TriangleAlertIcon } from '@thiagoschoeffel/ts-components'
 import { formatAddressLocation, formatAddressStreet } from './address'
 import { formatCurrency } from './mockData'
 import type { Customer, CustomerAddress, OrderItem } from './types'
@@ -21,6 +21,9 @@ const props = withDefaults(defineProps<{
   saving?: boolean
   showValidation?: boolean
   saveLabel?: string
+  capacityUsed?: number
+  capacityLimit?: number
+  dailyProductionDemand?: number
 }>(), {
   customer: undefined,
   address: undefined,
@@ -35,7 +38,10 @@ const props = withDefaults(defineProps<{
   paymentDueDate: undefined,
   saving: false,
   showValidation: false,
-  saveLabel: 'Salvar pedido'
+  saveLabel: 'Salvar pedido',
+  capacityUsed: 0,
+  capacityLimit: 0,
+  dailyProductionDemand: 0
 })
 
 defineEmits<{ save: [] }>()
@@ -75,6 +81,36 @@ const paymentDueDateLabel = computed(() => props.paymentDueDate
       <div class="flex items-center justify-between gap-4">
         <span class="text-sm text-slate-500">Itens</span>
         <span class="font-medium text-slate-800">{{ props.items.length }}</span>
+      </div>
+
+      <div v-if="props.capacityLimit" class="space-y-3 border-t border-slate-200 pt-4">
+        <div class="flex items-center justify-between gap-4 text-sm">
+          <span class="font-medium text-slate-600">Capacidade do dia</span>
+          <span class="font-medium text-slate-800">{{ props.capacityUsed }} / {{ props.capacityLimit }}</span>
+        </div>
+        <Progress
+          :value="props.capacityUsed + props.dailyProductionDemand"
+          :max="props.capacityLimit"
+          :variant="props.capacityUsed + props.dailyProductionDemand > props.capacityLimit ? 'danger' : 'info'"
+          size="small"
+          label="Capacidade projetada após a confirmação" />
+        <Alert
+          :variants="props.capacityUsed + props.dailyProductionDemand > props.capacityLimit ? 'warning' : 'info'"
+          size="small"
+          :title="props.dailyProductionDemand === 0
+            ? 'Sem consumo da capacidade diária'
+            : `${props.dailyProductionDemand} ${props.dailyProductionDemand === 1 ? 'refeição prevista' : 'refeições previstas'}`"
+          :description="props.dailyProductionDemand === 0
+            ? 'Itens congelados consomem estoque, não capacidade de produção do dia.'
+            : props.capacityUsed + props.dailyProductionDemand > props.capacityLimit
+              ? 'O pedido pode ser salvo como aberto, mas não poderá ser confirmado sem capacidade disponível.'
+              : `${props.capacityLimit - props.capacityUsed - props.dailyProductionDemand} refeições permanecerão disponíveis. A reserva ocorrerá somente na confirmação.`">
+          <template #icon>
+            <InfoIcon v-if="props.dailyProductionDemand === 0" />
+            <TriangleAlertIcon v-else-if="props.capacityUsed + props.dailyProductionDemand > props.capacityLimit" />
+            <CheckIcon v-else />
+          </template>
+        </Alert>
       </div>
 
       <div class="space-y-2 border-t border-slate-200 pt-4">

@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { ArrowRightIcon, Card, Progress, TriangleAlertIcon } from '@thiagoschoeffel/ts-components'
 import { getPackingSnapshot } from '../../mocks/packing'
+import { getCapacitySnapshot } from '../../mocks/capacity'
 
 interface SummaryCard {
   label: string
@@ -13,6 +14,7 @@ interface SummaryCard {
     value: number
     max: number
     label: string
+    variant?: 'info' | 'danger'
   }
   action: {
     label: string
@@ -21,6 +23,7 @@ interface SummaryCard {
 }
 
 const packing = getPackingSnapshot()
+const capacity = getCapacitySnapshot([], new URLSearchParams(window.location.search).get('mock') ?? undefined)
 const summaries = computed<SummaryCard[]>(() => [
   {
     label: 'Pedidos',
@@ -32,13 +35,15 @@ const summaries = computed<SummaryCard[]>(() => [
   },
   {
     label: 'Capacidade',
-    primary: '71 / 90',
-    secondary: '19 restantes',
+    primary: `${capacity.used} / ${capacity.limit}`,
+    secondary: `${capacity.remaining} restantes`,
     footerLabel: 'Ver produção',
+    hasAlert: capacity.remaining === 0,
     progress: {
-      value: 71,
-      max: 90,
-      label: 'Capacidade utilizada'
+      value: capacity.used,
+      max: capacity.limit,
+      label: 'Capacidade utilizada',
+      variant: capacity.remaining === 0 ? 'danger' : 'info'
     },
     action: { label: 'Ver produção', href: '/operacoes/producao' }
   },
@@ -75,6 +80,7 @@ const summaries = computed<SummaryCard[]>(() => [
         class="mt-3"
         :value="summary.progress.value"
         :max="summary.progress.max"
+        :variant="summary.progress.variant"
         :label="summary.progress.label" />
       <p :class="summary.progress ? 'mt-3' : 'mt-1'" class="font-medium text-slate-600">
         {{ summary.secondary }}

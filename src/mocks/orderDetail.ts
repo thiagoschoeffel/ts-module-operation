@@ -3,6 +3,8 @@ import type { CustomerAddress, OrderItem, PaymentCondition, PaymentMethod } from
 import type { PackingLabelBundle, PackingLabelPrintRecord } from '../types/packingLabels'
 import { getPublishedMenu } from './dailyMenu'
 import { allocateFrozenOrderItems, handleFrozenCancellation } from './frozenOrderStock'
+import { cancellationReleasesCapacity } from '../domain/capacity'
+import { releaseCapacityForOrder, reserveCapacityForOrder, rollbackCapacityReservation } from './capacity'
 import { mockOrders, type MockOrder, type OrderStatus } from './orders'
 
 export type OrderDetailStatus =
@@ -604,9 +606,16 @@ export function saveOrderDetail(order: OrderDetail) {
   writeStoredOrders(orders)
 }
 
-export function confirmOrderDetail(order: OrderDetail) {
+export function confirmOrderDetail(order: OrderDetail, options: { simulateCapacityConflict?: boolean } = {}) {
   const updated = cloneOrderDetail(order)
-  updated.items = allocateFrozenOrderItems(updated.items)
+  reserveCapacityForOrder(updated.id, updated.items, options.simulateCapacityConflict)
+  try {
+    updated.items = allocateFrozenOrderItems(updated.items)
+  }
+  catch (error) {
+    rollbackCapacityReservation(updated.id)
+    throw error
+  }
   replaceDomainState(updated, 'confirmed')
   updated.readyForReview = false
   updated.confirmedAt = 'Hoje às 11:46 por Ana'
@@ -626,6 +635,8 @@ export function cancelOrderDetail(order: OrderDetail, reasonValue: string, detai
     return order
 
   const updated = cloneOrderDetail(order)
+  if (cancellationReleasesCapacity(updated.status))
+    releaseCapacityForOrder(updated.id, updated.items)
   const hasAllocatedFrozenItems = updated.items.some(item => item.frozenStock?.allocationStatus === 'allocated')
   if (hasAllocatedFrozenItems)
     updated.items = handleFrozenCancellation(updated.items, updated.status === 'confirmed')

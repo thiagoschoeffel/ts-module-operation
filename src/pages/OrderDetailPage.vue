@@ -30,6 +30,7 @@ import {
   type OrderDetailStatus
 } from '../mocks/orderDetail'
 import { getFrozenStockIssues, previewFrozenOrderAllocations } from '../mocks/frozenOrderStock'
+import { getCapacitySnapshot } from '../mocks/capacity'
 import { printPackingLabels } from '../services/packingLabelPrinting'
 import type { PackingLabelPrintSelection } from '../types/packingLabels'
 
@@ -84,6 +85,11 @@ const frozenAllocationPreviews = computed(() => {
   try { return previewFrozenOrderAllocations(order.value.items) }
   catch { return [] }
 })
+const capacityScenario = new URLSearchParams(window.location.search).get('mock') ?? undefined
+const capacity = computed(() => getCapacitySnapshot(order.value?.items ?? [], capacityScenario))
+const capacityIssue = computed(() => capacity.value.exceeded
+  ? `Capacidade insuficiente · restam ${capacity.value.remaining} refeições e este pedido precisa de ${capacity.value.requested}`
+  : undefined)
 const sanitizedOrderNote = computed(() => sanitizeRichText(order.value?.note ?? ''))
 function richTextPlainText(value?: string) { return sanitizeRichText(value ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() }
 const paymentConditionLabel = computed(() => paymentConditionOptions.find(option => option.value === order.value?.paymentCondition)?.label)
@@ -101,6 +107,8 @@ const operationalIssues = computed(() => {
     issues.push('Janela de entrega não definida')
   if (hasBlockingRestriction.value)
     issues.push('Restrição alimentar')
+  if (capacityIssue.value)
+    issues.push(capacityIssue.value)
   issues.push(...frozenStockIssues.value)
   return [...new Set(issues)]
 })
@@ -230,7 +238,9 @@ function confirmOrder(close: () => void) {
     if (!order.value)
       return
     try {
-      order.value = confirmOrderDetail(order.value)
+      order.value = confirmOrderDetail(order.value, {
+        simulateCapacityConflict: capacityScenario === 'capacidade-conflito'
+      })
       confirmationFeedback.value = `Pedido #${order.value.id} confirmado`
       emit('loaded', order.value)
       close()
@@ -753,9 +763,30 @@ onBeforeUnmount(() => {
               <template #actions><Button type="button" variant="secondary" size="small" @click="editOrder">Editar pedido</Button></template>
             </Alert>
             <div v-else class="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-emerald-800">
-              <p class="flex items-center gap-2 font-medium"><CheckIcon class="size-4" /> Capacidade disponível</p>
+              <p class="flex items-center gap-2 font-medium">
+                <CheckIcon class="size-4" />
+                {{ capacity.requested === 0 ? 'Sem consumo da capacidade diária' : `Capacidade disponível para ${capacity.requested} ${capacity.requested === 1 ? 'refeição' : 'refeições'}` }}
+              </p>
               <p class="flex items-center gap-2 font-medium"><CheckIcon class="size-4" /> Restrições verificadas</p>
               <p v-if="frozenItems.length" class="flex items-center gap-2 font-medium"><CheckIcon class="size-4" /> Estoque congelado disponível</p>
+            </div>
+            <div class="space-y-3 border-t border-slate-200 pt-4">
+              <div class="flex items-center justify-between gap-4 text-sm">
+                <span class="font-medium text-slate-700">Capacidade após confirmar</span>
+                <span class="font-semibold text-slate-900">{{ capacity.projectedUsed }} / {{ capacity.limit }}</span>
+              </div>
+              <Progress
+                :value="capacity.projectedUsed"
+                :max="capacity.limit"
+                :variant="capacity.exceeded ? 'danger' : 'info'"
+                size="small"
+                label="Capacidade projetada após a confirmação" />
+              <p class="text-sm text-slate-500">
+                {{ capacity.requested === 0
+                  ? 'Este pedido possui somente itens de estoque congelado.'
+                  : `${capacity.requested} ${capacity.requested === 1 ? 'refeição será reservada' : 'refeições serão reservadas'}.` }}
+                Itens congelados não entram nesta conta.
+              </p>
             </div>
             <div v-if="frozenAllocationPreviews.length" class="space-y-3 border-t border-slate-200 pt-4">
               <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500">Alocação FEFO prevista</h3>
