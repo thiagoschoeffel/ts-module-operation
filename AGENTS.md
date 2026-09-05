@@ -529,7 +529,9 @@ Quando a execução de um épico de `../ts-host/docs/ROADMAP.md` autorizar versi
 - nunca implemente, faça commit ou push do épico diretamente em `main` ou `master`;
 - se commits do épico já estiverem na branch protegida local, crie a branch de trabalho no `HEAD` atual, sem reset ou descarte;
 - faça push somente da branch de trabalho, configure o upstream e abra ou atualize um pull request para `main`;
-- falha de commit, push ou criação do pull request mantém o épico em andamento.
+- depois de abrir ou atualizar todos os pull requests do épico, integre-os sem exigir ação manual do usuário; faça o merge imediatamente quando permitido ou habilite o auto-merge quando checks ou proteções estiverem pendentes, acompanhando até a integração ser confirmada;
+- após confirmar todos os merges, faça checkout de `main` em cada repositório afetado e atualize-a por fast-forward a partir de `origin/main`, deixando o workspace pronto para o próximo épico;
+- falha de commit, push, criação ou merge do pull request, ou de retorno seguro à `main`, mantém o épico em andamento.
 
 Não reverta alterações do usuário fora da tarefa.
 
