@@ -523,6 +523,14 @@ release
 publish
 ```
 
+Quando a execução de um épico de `../ts-host/docs/ROADMAP.md` autorizar versionamento e publicação:
+
+- antes da primeira alteração, crie a mesma branch `feat/eNN-descricao-curta` usada nos demais repositórios afetados;
+- nunca implemente, faça commit ou push do épico diretamente em `main` ou `master`;
+- se commits do épico já estiverem na branch protegida local, crie a branch de trabalho no `HEAD` atual, sem reset ou descarte;
+- faça push somente da branch de trabalho, configure o upstream e abra ou atualize um pull request para `main`;
+- falha de commit, push ou criação do pull request mantém o épico em andamento.
+
 Não reverta alterações do usuário fora da tarefa.
 
 Antes de concluir:
