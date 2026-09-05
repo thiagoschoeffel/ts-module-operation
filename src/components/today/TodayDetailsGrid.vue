@@ -4,6 +4,7 @@ import { ArrowRightIcon, Badge, Card, EmptyState } from '@thiagoschoeffel/ts-com
 import { getPublishedMenu, localDateIso } from '../../mocks/dailyMenu'
 import { getPackingQueue, getProductionSnapshot, type ApiPackingQueue, type ApiProductionSnapshot } from '../../services/operationsApi'
 import type { AuthenticatedApiRequest } from '../../services/ordersApi'
+import { getLogistics, type LogisticsSnapshot } from '../../services/logisticsApi'
 
 const props = defineProps<{ apiRequest?: AuthenticatedApiRequest }>()
 
@@ -18,12 +19,14 @@ const menuHref = `/cardapios/${menu?.date ?? localDateIso()}`
 
 const production = ref<ApiProductionSnapshot>()
 const packing = ref<ApiPackingQueue>()
+const logistics = ref<LogisticsSnapshot>()
 onMounted(async () => {
   if (!props.apiRequest) return
   try {
-    [production.value, packing.value] = await Promise.all([
+    [production.value, packing.value, logistics.value] = await Promise.all([
       getProductionSnapshot(props.apiRequest),
-      getPackingQueue(props.apiRequest)
+      getPackingQueue(props.apiRequest),
+      getLogistics(props.apiRequest)
     ])
   }
   catch { /* As páginas dedicadas oferecem a retentativa operacional. */ }
@@ -40,16 +43,16 @@ const packagingItems = computed(() => [
   { label: 'embalados', quantity: packing.value?.packed.length ?? 0 }
 ])
 
-const routeItems = [
-  { label: 'pedidos sem rota', quantity: 8 },
-  { label: 'rotas planejadas', quantity: 2 },
-  { label: 'rota em execução', quantity: 1 }
-]
+const routeItems = computed(() => [
+  { label: 'pedidos sem rota', quantity: logistics.value?.availableOrders.length ?? 0 },
+  { label: 'rotas planejadas', quantity: logistics.value?.routes.filter(x => x.status === 'Planned').length ?? 0 },
+  { label: 'rotas em execução', quantity: logistics.value?.routes.filter(x => x.status === 'InProgress').length ?? 0 }
+])
 
-const deliveryItems = [
-  { label: 'entregues', quantity: 18 },
-  { label: 'falha', quantity: 1 }
-]
+const deliveryItems = computed(() => [
+  { label: 'entregues', quantity: logistics.value?.routes.flatMap(x => x.stops).filter(x => x.result === 'Succeeded').length ?? 0 },
+  { label: 'falhas', quantity: logistics.value?.routes.flatMap(x => x.stops).filter(x => x.result === 'Failed').length ?? 0 }
+])
 </script>
 
 <template>

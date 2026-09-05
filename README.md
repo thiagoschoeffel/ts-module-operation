@@ -93,21 +93,17 @@ Estados previsíveis podem ser revisados sem alterar a massa local:
 - `?mock=sem-resultados`: busca preenchida sem correspondências.
 - `?mock=erro`: falha simulada ao carregar a fila.
 
-## Entregas demonstrativas
+## Entregas autoritativas
 
-A rota `/operacoes/entregas` recebe os pedidos embalados, agrupa as paradas por
-janela e permite atribuir um entregador ativo. Rotas planejadas podem ser
-iniciadas e cada parada registra entrega concluída ou falha, mantendo o pedido
-e seu histórico sincronizados com o restante da operação. Antes do início, a
-rota permite trocar o entregador, adicionar ou remover pedidos da mesma janela,
-reordenar as paradas e cancelar o planejamento, devolvendo os pedidos à fila sem
-apagar o histórico da rota.
-Ao iniciar, o operador revisa a folha da rota em um diálogo e pode imprimi-la;
-rotas em andamento mantêm a ação de reimpressão disponível no cabeçalho.
-Quando uma entrega falha, o pedido preserva a tentativa anterior e pode ser
-reagendado no detalhe para retornar à fila de uma nova rota.
+A rota `/operacoes/entregas` consulta a API autenticada, recebe somente pedidos
+embalados ou falhas já reagendadas e permite atribuí-los a um entregador ativo e
+disponível da Organização. A ordem selecionada vira a sequência persistida das
+paradas. O início valida novamente entregador, rota e todos os Pedidos antes de
+movê-los atomicamente para `InDelivery`.
 
-As rotas demonstrativas usam a chave `ts-operation-delivery-routes-v1` do
-`localStorage` e compartilham os pedidos persistidos pela operação. Estados
-previsíveis podem ser revisados com `?mock=sem-entregas`,
-`?mock=sem-resultados` e `?mock=erro`.
+Cada parada aceita uma única tentativa idempotente. Sucesso conclui o Pedido;
+falha exige motivo e preserva entregador, instante e observação. A rota termina
+quando todas as paradas foram tratadas, mesmo que existam falhas. O reagendamento
+registra data e janela anteriores, motivo e autoria e libera o Pedido para uma
+nova rota sem apagar a tentativa anterior. A folha de rota usa os snapshots
+históricos capturados no planejamento.

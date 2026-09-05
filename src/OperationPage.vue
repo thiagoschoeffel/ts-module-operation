@@ -138,7 +138,7 @@ function returnToOrders() {
         :api-request="props.apiRequest" />
       <ProductionPage v-else-if="props.section === 'producao'" :api-request="props.apiRequest" />
       <PackingPage v-else-if="props.section === 'embalagem'" :api-request="props.apiRequest" />
-      <DeliveryPage v-else-if="props.section === 'entregas'" />
+      <DeliveryPage v-else-if="props.section === 'entregas'" :api-request="props.apiRequest" />
       <OperationPlaceholderPage v-else :title="page.title" />
     </main>
   </div>
