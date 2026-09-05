@@ -107,3 +107,9 @@ quando todas as paradas foram tratadas, mesmo que existam falhas. O reagendament
 registra data e janela anteriores, motivo e autoria e libera o Pedido para uma
 nova rota sem apagar a tentativa anterior. A folha de rota usa os snapshots
 históricos capturados no planejamento.
+
+## Contrato e qualidade
+
+O build gera `@mf-types.zip` a partir dos props expostos por `OperationPage`,
+exige versões singleton compatíveis de Vue e do design system e bloqueia chunks
+acima do orçamento acordado. `npm run ci` executa testes, tipos, build e budget.
