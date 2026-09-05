@@ -6,7 +6,7 @@ import { navigate } from '../utils/navigation'
 
 const props = withDefaults(defineProps<{ mode?: 'create' | 'edit', orderId?: string, apiRequest?: AuthenticatedApiRequest }>(), { mode: 'create' })
 const today = new Date().toLocaleDateString('en-CA')
-const customerId = ref('11111111-1111-4111-8111-111111111111')
+const customerId = ref('')
 const operationalDate = ref(today)
 const items = ref<OrderItemInput[]>([])
 const version = ref(0)
@@ -24,14 +24,7 @@ const unitPrice = ref(0)
 const itemError = ref('')
 const saveIdempotencyKey = ref(crypto.randomUUID())
 
-const customerOptions = [
-  { value: '11111111-1111-4111-8111-111111111111', label: 'Maria Silva', description: 'Diretório de clientes será autoritativo no E12' },
-  { value: '22222222-2222-4222-8222-222222222222', label: 'João Souza', description: 'Diretório de clientes será autoritativo no E12' },
-  { value: '33333333-3333-4333-8333-333333333333', label: 'Ana Lima', description: 'Diretório de clientes será autoritativo no E12' }
-]
-const customerSelectOptions = computed(() => customerOptions.some(option => option.value === customerId.value)
-  ? customerOptions
-  : [{ value: customerId.value, label: `Cliente ${customerId.value.slice(0, 8).toUpperCase()}`, description: 'Identificador externo preservado no Pedido' }, ...customerOptions])
+const customerSelectOptions = computed(() => context.value?.customers.map(customer => ({ value: customer.id, label: customer.name, description: customer.phone })) ?? [])
 const customerName = computed(() => customerSelectOptions.value.find(option => option.value === customerId.value)?.label)
 const offerOptions = computed(() => context.value?.offers.map(offer => ({ value: offer.id, label: offer.name, description: offer.fulfillmentMode === 'FrozenStock' ? 'Atendido por estoque congelado' : 'Produção diária' })) ?? [])
 const producibleOptions = computed(() => context.value?.menuOptions.filter(item => item.availability === 'Available')
@@ -156,7 +149,7 @@ onMounted(async () => {
           <Select v-model="customerId" label="Cliente" :options="customerSelectOptions" required />
           <Input v-model="operationalDate" type="date" label="Data operacional" required />
         </div>
-        <p class="mt-3 text-xs text-slate-500">O Pedido persiste o identificador externo do cliente; o cadastro completo será integrado no E12.</p>
+        <p class="mt-3 text-xs text-slate-500">A seleção usa somente clientes ativos do diretório autoritativo.</p>
       </Card>
 
       <Card>
