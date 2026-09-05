@@ -17,6 +17,7 @@ import DeliveryPage from './pages/DeliveryPage.vue'
 import ProductionPage from './pages/ProductionPage.vue'
 import TodayPage from './pages/TodayPage.vue'
 import type { OperationSection, OrderPage } from './types/operation'
+import type { AuthenticatedApiRequest } from './services/ordersApi'
 import type { WhatsAppQuotaUsage } from './types/attendance'
 import { navigate } from './utils/navigation'
 
@@ -25,6 +26,7 @@ const props = withDefaults(
     section?: OperationSection
     orderPage?: OrderPage
     orderId?: string
+    apiRequest?: AuthenticatedApiRequest
   }>(),
   {
     section: 'hoje',
@@ -122,16 +124,18 @@ function returnToOrders() {
         props.section === 'entregas' ? '' : 'mt-6',
         (props.section === 'pedidos' && props.orderPage === 'list') || props.section === 'entregas' || props.section === 'atendimento' ? 'operation-fill-main' : ''
       ]">
-      <TodayPage v-if="props.section === 'hoje'" />
+      <TodayPage v-if="props.section === 'hoje'" :api-request="props.apiRequest" />
       <AttendancePage v-else-if="props.section === 'atendimento'" :quota-usage="attendanceQuota" />
-      <OrderListPage v-else-if="props.section === 'pedidos' && props.orderPage === 'list'" />
+      <OrderListPage v-else-if="props.section === 'pedidos' && props.orderPage === 'list'" :api-request="props.apiRequest" />
       <NewOrderPage
         v-else-if="props.section === 'pedidos' && (props.orderPage === 'new' || props.orderPage === 'edit')"
         :mode="props.orderPage === 'edit' ? 'edit' : 'create'"
-        :order-id="props.orderId" />
+        :order-id="props.orderId"
+        :api-request="props.apiRequest" />
       <OrderDetailPage
         v-else-if="props.section === 'pedidos' && props.orderPage === 'detail'"
-        :order-id="props.orderId" />
+        :order-id="props.orderId"
+        :api-request="props.apiRequest" />
       <ProductionPage v-else-if="props.section === 'producao'" />
       <PackingPage v-else-if="props.section === 'embalagem'" />
       <DeliveryPage v-else-if="props.section === 'entregas'" />
