@@ -31,12 +31,13 @@ Pedidos e capacidade diária já vêm da API. A montagem de Pedidos usa somente
 referências ativas retornadas pelo contexto autoritativo; publicação e
 disponibilidade completa de Cardápios entram no E11.
 
-## Painel de produção
+## Painel de produção demonstrativo
 
-A rota `/operacoes/producao` consolida as escolhas efetivas dos pedidos
-confirmados e em produção para responder quanto preparar em cada janela de
-entrega. Pedidos abertos, cancelados ou já encaminhados para embalagem não
-inflam essa necessidade.
+A rota `/operacoes/producao` representa a consolidação das escolhas efetivas dos
+pedidos confirmados e em produção para responder quanto preparar em cada janela
+de entrega. A fonte ainda é demonstrativa; a derivação dos Pedidos persistidos
+na API pertence ao E10. Pedidos abertos, cancelados ou já encaminhados para
+embalagem não inflam essa necessidade.
 
 O painel é responsivo para uso em tablets e possui **modo TV**, que ocupa a tela
 inteira com tipografia ampliada. Enquanto estiver aberto, relógio e dados são
@@ -45,7 +46,7 @@ refletidas sem recarregar a página. O modo TV nunca exibe rolagem: quando a
 quantidade de preparações ultrapassa o espaço disponível, o painel divide o
 conteúdo em telas e alterna entre elas automaticamente.
 
-## Fila de embalagem
+## Fila de embalagem demonstrativa
 
 A rota `/operacoes/embalagem` organiza os pedidos liberados para embalagem por
 janela de entrega. Cada item precisa ser conferido antes que o pedido possa ser
@@ -92,7 +93,7 @@ Estados previsíveis podem ser revisados sem alterar a massa local:
 - `?mock=sem-resultados`: busca preenchida sem correspondências.
 - `?mock=erro`: falha simulada ao carregar a fila.
 
-## Entregas
+## Entregas demonstrativas
 
 A rota `/operacoes/entregas` recebe os pedidos embalados, agrupa as paradas por
 janela e permite atribuir um entregador ativo. Rotas planejadas podem ser
