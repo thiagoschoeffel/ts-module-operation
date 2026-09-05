@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { Button, ChevronLeftIcon, PageHeader, PlusIcon } from '@thiagoschoeffel/ts-components'
 import '@thiagoschoeffel/ts-components/style.css'
 import './style.css'
 import DataSyncStatus from './components/DataSyncStatus.vue'
 import WhatsAppQuotaSummary from './components/attendance/WhatsAppQuotaSummary.vue'
 import { operationPages } from './config/operationPages'
-import { loadWhatsAppQuotaUsage } from './mocks/attendance'
 import AttendancePage from './pages/AttendancePage.vue'
 import OperationPlaceholderPage from './pages/OperationPlaceholderPage.vue'
 import NewOrderPage from './pages/NewOrderPage.vue'
@@ -56,10 +55,6 @@ const pageSubtitle = computed(() => {
     return undefined
   return page.value.subtitle
 })
-
-watch(() => props.section, async (section) => {
-  attendanceQuota.value = section === 'atendimento' ? await loadWhatsAppQuotaUsage() : undefined
-}, { immediate: true })
 
 function createOrder() {
   const returnUrl = `${window.location.pathname}${window.location.search}`
@@ -125,7 +120,7 @@ function returnToOrders() {
         (props.section === 'pedidos' && props.orderPage === 'list') || props.section === 'entregas' || props.section === 'atendimento' ? 'operation-fill-main' : ''
       ]">
       <TodayPage v-if="props.section === 'hoje'" :api-request="props.apiRequest" />
-      <AttendancePage v-else-if="props.section === 'atendimento'" :quota-usage="attendanceQuota" />
+      <AttendancePage v-else-if="props.section === 'atendimento'" :quota-usage="attendanceQuota" :api-request="props.apiRequest" @quota="attendanceQuota = $event" />
       <OrderListPage v-else-if="props.section === 'pedidos' && props.orderPage === 'list'" :api-request="props.apiRequest" />
       <NewOrderPage
         v-else-if="props.section === 'pedidos' && (props.orderPage === 'new' || props.orderPage === 'edit')"

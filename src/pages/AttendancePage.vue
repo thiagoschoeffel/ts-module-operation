@@ -27,22 +27,25 @@ import {
 } from '@thiagoschoeffel/ts-components'
 import {
   changeAttendanceMode,
-  loadAttendanceConversations,
+  loadAttendance,
   retryAttendanceMessage,
   sendAttendanceMessage
-} from '../mocks/attendance'
+} from '../services/attendanceApi'
 import AttendanceSkeleton from '../components/attendance/AttendanceSkeleton.vue'
 import { richTextToWhatsAppText } from '../domain/whatsappText'
 import { operationalQuotaUsage } from '../domain/whatsappQuota'
 import type { AttendanceConversation, AttendanceMessage, AttendanceMode, WhatsAppQuotaUsage } from '../types/attendance'
 import { navigate } from '../utils/navigation'
+import type { AuthenticatedApiRequest } from '../services/ordersApi'
 
 type AttendanceFilter = 'open' | 'human' | 'failed' | 'closed'
 type AttendanceScenario = 'default' | 'empty' | 'error' | 'loading'
 
 const props = defineProps<{
   quotaUsage?: WhatsAppQuotaUsage
+  apiRequest?: AuthenticatedApiRequest
 }>()
+const emit = defineEmits<{ quota: [usage: WhatsAppQuotaUsage] }>()
 const { quotaUsage } = toRefs(props)
 
 const params = new URLSearchParams(window.location.search)
@@ -179,7 +182,10 @@ async function load() {
       errorScenarioConsumed.value = true
       throw new Error('Falha demonstrativa.')
     }
-    conversations.value = scenario === 'empty' ? [] : await loadAttendanceConversations()
+    if (!props.apiRequest) throw new Error('A sessão autenticada da API não está disponível.')
+    const snapshot = await loadAttendance(props.apiRequest)
+    conversations.value = scenario === 'empty' ? [] : snapshot.conversations
+    emit('quota', snapshot.quota)
     if (!conversations.value.some(item => item.id === selectedId.value))
       selectedId.value = conversations.value.find(item => item.mode !== 'closed')?.id ?? conversations.value[0]?.id ?? ''
     scrollMessagesToBottom()
@@ -191,10 +197,10 @@ async function load() {
 }
 
 async function setMode(mode: AttendanceMode) {
-  if (!selectedConversation.value) return
+  if (!selectedConversation.value || !props.apiRequest) return
   updatingMode.value = true
   try {
-    replaceConversation(await changeAttendanceMode(selectedConversation.value.id, mode))
+    replaceConversation(await changeAttendanceMode(props.apiRequest, selectedConversation.value, mode))
     showFeedback(mode === 'human' ? 'Atendimento assumido por Ana; automação pausada.' : mode === 'automated' ? 'Automação retomada.' : 'Conversa encerrada.')
   } finally {
     updatingMode.value = false
@@ -202,11 +208,11 @@ async function setMode(mode: AttendanceMode) {
 }
 
 async function sendMessage() {
-  if (!selectedConversation.value || !canSend.value) return
+  if (!selectedConversation.value || !canSend.value || !props.apiRequest) return
   sending.value = true
   try {
     const whatsAppText = richTextToWhatsAppText(sanitizeRichText(messageDraft.value))
-    replaceConversation(await sendAttendanceMessage(selectedConversation.value.id, whatsAppText))
+    replaceConversation(await sendAttendanceMessage(props.apiRequest, selectedConversation.value.id, whatsAppText))
     messageDraft.value = ''
     scrollMessagesToBottom()
     showFeedback('Mensagem enviada e registrada no histórico.')
@@ -216,10 +222,10 @@ async function sendMessage() {
 }
 
 async function retryMessage(message: AttendanceMessage) {
-  if (!selectedConversation.value) return
+  if (!selectedConversation.value || !props.apiRequest) return
   retryingMessageId.value = message.id
   try {
-    replaceConversation(await retryAttendanceMessage(selectedConversation.value.id, message.externalId))
+    replaceConversation(await retryAttendanceMessage(props.apiRequest, selectedConversation.value.id, message.id))
     showFeedback('Mensagem reprocessada sem criar uma cópia.')
   } finally {
     retryingMessageId.value = ''
