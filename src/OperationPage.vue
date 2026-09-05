@@ -15,18 +15,12 @@ import PackingPage from './pages/PackingPage.vue'
 import DeliveryPage from './pages/DeliveryPage.vue'
 import ProductionPage from './pages/ProductionPage.vue'
 import TodayPage from './pages/TodayPage.vue'
-import type { OperationSection, OrderPage } from './types/operation'
-import type { AuthenticatedApiRequest } from './services/ordersApi'
 import type { WhatsAppQuotaUsage } from './types/attendance'
+import type { OperationPageProps } from './types/federation'
 import { navigate } from './utils/navigation'
 
 const props = withDefaults(
-  defineProps<{
-    section?: OperationSection
-    orderPage?: OrderPage
-    orderId?: string
-    apiRequest?: AuthenticatedApiRequest
-  }>(),
+  defineProps<OperationPageProps>(),
   {
     section: 'hoje',
     orderPage: 'list'

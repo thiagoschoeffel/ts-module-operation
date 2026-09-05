@@ -6,7 +6,14 @@
   "scripts": {
     "dev": "vite --port 4174 --strictPort",
     "test": "node --test src/domain/*.test.mjs src/services/*.test.mjs",
-    "build": "vue-tsc --noEmit && vite build"
+    "build": "vue-tsc --noEmit && vite build",
+    "check:bundle": "node scripts/check-bundle-budget.mjs",
+    "ci": "npm test && npm run build && npm run check:bundle"
+  },
+  "bundleBudget": {
+    "js": { "bytes": 520000, "gzipBytes": 170000 },
+    "css": { "bytes": 100000, "gzipBytes": 20000 },
+    "remoteEntry": { "bytes": 25000, "gzipBytes": 8000 }
   },
   "dependencies": {
     "@internationalized/date": "^3.12.4",
