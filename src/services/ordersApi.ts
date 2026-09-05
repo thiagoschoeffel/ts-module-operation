@@ -69,8 +69,9 @@ export interface ApiDailyCapacity {
 }
 
 export interface ApiOrderAuthoringContext {
-  offers: Array<{ id: string, name: string, fulfillmentMode: ApiFulfillmentMode }>
+  offers: Array<{ id: string, name: string, fulfillmentMode: ApiFulfillmentMode, effectivePrice?: number, requiresMenuChoice: boolean }>
   producibles: Array<{ id: string, name: string }>
+  menuOptions: Array<{ id: string, category: string, producibleItemId: string, producibleItemName: string, availability: 'Available' | 'SoldOut' | 'Suspended' }>
   frozenConfigurations: Array<{
     id: string
     offerId: string

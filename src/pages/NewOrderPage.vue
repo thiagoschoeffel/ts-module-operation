@@ -34,7 +34,8 @@ const customerSelectOptions = computed(() => customerOptions.some(option => opti
   : [{ value: customerId.value, label: `Cliente ${customerId.value.slice(0, 8).toUpperCase()}`, description: 'Identificador externo preservado no Pedido' }, ...customerOptions])
 const customerName = computed(() => customerSelectOptions.value.find(option => option.value === customerId.value)?.label)
 const offerOptions = computed(() => context.value?.offers.map(offer => ({ value: offer.id, label: offer.name, description: offer.fulfillmentMode === 'FrozenStock' ? 'Atendido por estoque congelado' : 'Produção diária' })) ?? [])
-const producibleOptions = computed(() => context.value?.producibles.map(item => ({ value: item.id, label: item.name })) ?? [])
+const producibleOptions = computed(() => context.value?.menuOptions.filter(item => item.availability === 'Available')
+  .map(item => ({ value: item.producibleItemId, label: `${item.category} · ${item.producibleItemName}` })) ?? [])
 const selectedOffer = computed(() => context.value?.offers.find(item => item.id === selectedOfferId.value))
 const frozenOptions = computed(() => context.value?.frozenConfigurations
   .filter(item => !selectedOfferId.value || item.offerId === selectedOfferId.value)
@@ -50,7 +51,7 @@ watch(operationalDate, loadContext)
 watch(selectedOfferId, () => {
   selectedProducibleId.value = ''
   selectedFrozenConfigurationId.value = ''
-  unitPrice.value = 0
+  unitPrice.value = selectedOffer.value?.effectivePrice ?? 0
 })
 watch([customerId, operationalDate, items], () => { saveIdempotencyKey.value = crypto.randomUUID() }, { deep: true })
 
@@ -75,11 +76,11 @@ function addItem() {
     return
   }
   if (selectedOffer.value.fulfillmentMode === 'DailyProduction') {
-    if (!selectedProducibleId.value || unitPrice.value < 0) {
-      itemError.value = 'Selecione o item produzível e informe o preço unitário.'
+    if (!selectedProducibleId.value || selectedOffer.value.effectivePrice === undefined) {
+      itemError.value = 'Selecione uma opção disponível do cardápio publicado.'
       return
     }
-    items.value.push({ offerId: selectedOffer.value.id, producibleItemId: selectedProducibleId.value, unitPrice: unitPrice.value, quantity: quantity.value })
+    items.value.push({ offerId: selectedOffer.value.id, producibleItemId: selectedProducibleId.value, unitPrice: selectedOffer.value.effectivePrice, quantity: quantity.value })
   }
   else {
     const configuration = context.value?.frozenConfigurations.find(item => item.id === selectedFrozenConfigurationId.value)
@@ -159,14 +160,14 @@ onMounted(async () => {
       </Card>
 
       <Card>
-        <template #header><h2 class="text-xs font-semibold uppercase tracking-wide text-slate-500">Itens autoritativos</h2><p class="mt-1 text-sm text-slate-500">Ofertas, produzíveis, preços de congelados e estoque vêm da API.</p></template>
-        <EmptyState v-if="!context?.offers.length" size="small" title="Nenhuma oferta ativa" description="Cadastre e ative as referências autoritativas antes de criar um pedido." />
+        <template #header><h2 class="text-xs font-semibold uppercase tracking-wide text-slate-500">Itens autoritativos</h2><p class="mt-1 text-sm text-slate-500">Ofertas, opções e preços vêm do cardápio publicado; congelados vêm do estoque elegível.</p></template>
+        <EmptyState v-if="!context?.offers.length" size="small" title="Nenhuma oferta disponível" description="Publique o cardápio deste dia ou disponibilize uma configuração de congelado antes de criar o pedido." />
         <template v-else>
           <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Select v-model="selectedOfferId" label="Oferta" placeholder="Selecione" :options="offerOptions" />
-            <Select v-if="selectedOffer?.fulfillmentMode === 'DailyProduction'" v-model="selectedProducibleId" label="Item produzível" placeholder="Selecione" :options="producibleOptions" />
+            <Select v-if="selectedOffer?.fulfillmentMode === 'DailyProduction'" v-model="selectedProducibleId" label="Opção do cardápio" placeholder="Selecione" :options="producibleOptions" />
             <Select v-else-if="selectedOffer?.fulfillmentMode === 'FrozenStock'" v-model="selectedFrozenConfigurationId" label="Configuração congelada" placeholder="Selecione" :options="frozenOptions" />
-            <Input v-if="selectedOffer?.fulfillmentMode === 'DailyProduction'" v-model="unitPrice" type="number" min="0" step="0.01" label="Preço unitário" />
+            <Input v-if="selectedOffer?.fulfillmentMode === 'DailyProduction'" v-model="unitPrice" type="number" min="0" step="0.01" label="Preço publicado" disabled />
             <Input v-if="selectedOffer" v-model="quantity" type="number" min="1" step="1" label="Quantidade" />
           </div>
           <Alert v-if="itemError" class="mt-3" variants="danger" :description="itemError" />
