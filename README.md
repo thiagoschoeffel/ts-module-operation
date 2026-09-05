@@ -11,23 +11,25 @@ npm run dev
 The application runs at http://localhost:4174. The host loads its
 `remoteEntry.js` from http://localhost:4174/remoteEntry.js.
 
-## Cenários mock da lista de pedidos
+## Pedidos e capacidade
 
-Use o parâmetro `mock` na rota `/operacoes/pedidos` para conferir os estados
-vazios da tabela sem alterar a massa de dados:
+As rotas `/operacoes/pedidos`, `/operacoes/pedidos/novo` e o detalhe usam o
+adapter HTTP autenticado recebido do shell. Lista, criação, edição, confirmação,
+cancelamento, reagendamento e capacidade são autoritativos; escritas enviam
+`Idempotency-Key` e a versão esperada quando existe concorrência otimista.
 
-- `?mock=sem-pedidos`: operação sem pedidos cadastrados.
-- `?mock=sem-resultados`: busca preenchida sem resultados correspondentes.
-- `?mock=erro`: falha simulada no carregamento da lista.
-
-Sem o parâmetro, a tela continua usando a massa completa de pedidos.
+O formulário consulta ofertas, itens produzíveis e configurações congeladas
+ativas na API. A projeção de capacidade não reserva saldo: confirmação e
+reagendamento repetem a validação dentro da transação do servidor. Até o E12, o
+Pedido continua persistindo um identificador externo de cliente e usa um
+diretório provisório apenas para apresentação da seleção.
 
 ## Integração com o cardápio diário
 
-O dashboard Hoje e a montagem de novos pedidos consultam o cardápio publicado
-do dia. Somente ofertas e opções marcadas como disponíveis podem ser adicionadas
-a novos pedidos; a massa local padrão mantém a demonstração utilizável quando
-nenhum cardápio foi persistido ainda.
+O dashboard Hoje ainda consulta o cardápio demonstrativo, mas contagem de
+Pedidos e capacidade diária já vêm da API. A montagem de Pedidos usa somente
+referências ativas retornadas pelo contexto autoritativo; publicação e
+disponibilidade completa de Cardápios entram no E11.
 
 ## Painel de produção
 

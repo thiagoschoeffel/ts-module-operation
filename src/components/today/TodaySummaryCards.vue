@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ArrowRightIcon, Card, Progress, TriangleAlertIcon } from '@thiagoschoeffel/ts-components'
 import { getPackingSnapshot } from '../../mocks/packing'
-import { getCapacitySnapshot } from '../../mocks/capacity'
+import { getDailyCapacity, listOrders, type ApiDailyCapacity, type ApiOrderSummary, type AuthenticatedApiRequest } from '../../services/ordersApi'
+
+const props = defineProps<{ apiRequest?: AuthenticatedApiRequest }>()
 
 interface SummaryCard {
   label: string
@@ -23,29 +25,40 @@ interface SummaryCard {
 }
 
 const packing = getPackingSnapshot()
-const capacity = getCapacitySnapshot([], new URLSearchParams(window.location.search).get('mock') ?? undefined)
+const orders = ref<ApiOrderSummary[]>([])
+const capacity = ref<ApiDailyCapacity>()
+const today = new Date().toLocaleDateString('en-CA')
+onMounted(async () => {
+  if (!props.apiRequest) return
+  try {
+    [orders.value, capacity.value] = await Promise.all([
+      listOrders(props.apiRequest),
+      getDailyCapacity(props.apiRequest, today)
+    ])
+  }
+  catch { /* Cada página de destino mantém sua própria retentativa detalhada. */ }
+})
 const summaries = computed<SummaryCard[]>(() => [
   {
     label: 'Pedidos',
-    primary: '42',
-    secondary: 'confirmados',
-    footerLabel: 'Revisar 4 pedidos',
-    hasAlert: true,
-    action: { label: 'Revisar 4 pedidos', href: '/operacoes/pedidos?tab=revisao' }
+    primary: String(orders.value.filter(order => order.operationalDate === today).length),
+    secondary: 'no dia operacional',
+    footerLabel: 'Abrir pedidos',
+    action: { label: 'Abrir pedidos', href: '/operacoes/pedidos' }
   },
   {
     label: 'Capacidade',
-    primary: `${capacity.used} / ${capacity.limit}`,
-    secondary: `${capacity.remaining} restantes`,
-    footerLabel: 'Ver produção',
-    hasAlert: capacity.remaining === 0,
-    progress: {
-      value: capacity.used,
-      max: capacity.limit,
+    primary: capacity.value ? `${capacity.value.reservedUnits} / ${capacity.value.totalUnits}` : '—',
+    secondary: capacity.value ? `${capacity.value.availableUnits} restantes` : 'não configurada',
+    footerLabel: 'Ver pedidos',
+    hasAlert: capacity.value?.availableUnits === 0,
+    progress: capacity.value ? {
+      value: capacity.value.reservedUnits,
+      max: capacity.value.totalUnits,
       label: 'Capacidade utilizada',
-      variant: capacity.remaining === 0 ? 'danger' : 'info'
-    },
-    action: { label: 'Ver produção', href: '/operacoes/producao' }
+      variant: capacity.value.availableUnits === 0 ? 'danger' : 'info'
+    } : undefined,
+    action: { label: 'Ver pedidos', href: '/operacoes/pedidos' }
   },
   {
     label: 'Embalagem',
