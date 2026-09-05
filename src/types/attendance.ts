@@ -13,6 +13,7 @@ export interface AttendanceMessage {
   platformTimestamp: string
   receivedTimestamp: string
   processingStatus: MessageProcessingStatus
+  failureReason?: string
 }
 
 export interface AttendanceConversation {
@@ -24,9 +25,10 @@ export interface AttendanceConversation {
   assignedTo?: string
   unreadCount: number
   lastMessageAt: string
-  orderId?: number
+  orderId?: string | number
   orderPreparation?: 'assembling' | 'ready-for-review'
   messages: AttendanceMessage[]
+  version: number
 }
 
 export interface WhatsAppQuotaUsage {
