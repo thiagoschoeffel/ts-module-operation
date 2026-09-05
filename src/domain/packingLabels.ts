@@ -2,7 +2,7 @@ import type { CustomerAddress, OrderItem } from '../components/new-order/types'
 import type { PackingLabelBundle } from '../types/packingLabels'
 
 export interface PackingLabelOrderSource {
-  id: number
+  id: string | number
   customer: {
     name: string
     phone: string
@@ -52,15 +52,16 @@ export function createPackingLabelBundle(
   order: PackingLabelOrderSource,
   createdAt = new Date().toISOString()
 ): PackingLabelBundle {
+  const orderId = String(order.id)
   const dailyItems = order.items.filter(item => item.fulfillmentSource === 'daily-production')
   const frozenItems = order.items.filter(item => item.fulfillmentSource === 'frozen-stock')
 
   return {
     createdAt,
     dailyItemLabels: dailyItems.map((item, index) => ({
-      id: `pedido-${order.id}-item-${item.id}-${index + 1}`,
+      id: `pedido-${orderId}-item-${item.id}-${index + 1}`,
       orderItemId: item.id,
-      orderId: order.id,
+      orderId,
       customerName: order.customer.name,
       productName: item.name,
       detailLines: uniqueLines(item.details),
@@ -72,8 +73,8 @@ export function createPackingLabelBundle(
     })),
     preLabeledFrozenItemIds: frozenItems.map(item => item.id),
     externalPackageLabel: {
-      id: `pedido-${order.id}-pacote`,
-      orderId: order.id,
+      id: `pedido-${orderId}-pacote`,
+      orderId,
       customerName: order.customer.name,
       phone: order.customer.channel === 'Balcão' ? undefined : order.customer.phone,
       addressLines: order.customer.channel === 'Balcão' ? [] : addressLines(order.deliveryAddress),

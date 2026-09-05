@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import {
   Alert,
   Badge,
@@ -24,59 +24,64 @@ import type { OrderItem } from '../components/new-order/types'
 import PackingLabelPreviews from '../components/packing/PackingLabelPreviews.vue'
 import { createPackingLabelBundle, fullPackingLabelSelection } from '../domain/packingLabels'
 import {
-  markOrderPacked,
-  recordPackingLabelPrint,
-  savePackingLabelSnapshot,
-  type OrderDetail
-} from '../mocks/orderDetail'
-import { getPackingSnapshot } from '../mocks/packing'
-import {
   printPackingLabels,
   usesDirectZebraPackingPrint,
   type PackingLabelPrintState
 } from '../services/packingLabelPrinting'
+import {
+  getPackingQueue,
+  packOrder,
+  recordLabelPrint,
+  type ApiPackingOrder
+} from '../services/operationsApi'
+import type { AuthenticatedApiRequest } from '../services/ordersApi'
 import type { PackingLabelBundle, PackingLabelPrintSelection } from '../types/packingLabels'
 
 type PackingTab = 'awaiting' | 'packed'
-type PackingMockScenario = 'padrao' | 'sem-embalagens' | 'sem-resultados' | 'erro' | 'impressao-erro'
 type Feedback = { variant: 'success' | 'danger', title: string, description: string }
+type PackingViewOrder = {
+  id: string
+  api: ApiPackingOrder
+  customer: { name: string, phone: string, channel: 'WhatsApp' | 'Telefone' | 'Balcão', restriction?: string }
+  deliveryWindow?: string
+  items: OrderItem[]
+  packedAt?: string
+  packedBy?: string
+  packingLabels?: PackingLabelBundle
+}
 type PendingPacking = {
-  order: OrderDetail
+  order: PackingViewOrder
   bundle: PackingLabelBundle
   selection: PackingLabelPrintSelection
+  idempotencyKey: string
 }
 
+const props = defineProps<{ apiRequest?: AuthenticatedApiRequest }>()
+
 const params = new URLSearchParams(window.location.search)
-const validScenarios = new Set<PackingMockScenario>(['padrao', 'sem-embalagens', 'sem-resultados', 'erro', 'impressao-erro'])
-const requestedScenario = params.get('mock')
-const mockScenario = validScenarios.has(requestedScenario as PackingMockScenario)
-  ? requestedScenario as PackingMockScenario
-  : 'padrao'
 const requestedTab = params.get('tab')
 
-const snapshot = ref(getPackingSnapshot())
+const snapshot = ref({ awaiting: [] as PackingViewOrder[], packed: [] as PackingViewOrder[], awaitingItemCount: 0, packedItemCount: 0, restrictionCount: 0 })
 const activeTab = ref<PackingTab>(requestedTab === 'packed' ? 'packed' : 'awaiting')
-const search = ref(mockScenario === 'sem-resultados' ? 'Cliente inexistente' : '')
+const search = ref('')
 const feedback = ref<Feedback>()
-const hasError = ref(mockScenario === 'erro')
-const printingOrderId = ref<number>()
+const hasError = ref(false)
+const loadError = ref('')
+const printingOrderId = ref<string>()
 const packingDialogOpen = ref(false)
 const pendingPacking = ref<PendingPacking>()
 const reprintDialogOpen = ref(false)
-const reprintOrder = ref<OrderDetail>()
+const reprintOrder = ref<PackingViewOrder>()
 const reprintSelection = ref<PackingLabelPrintSelection>({ dailyItemLabelIds: [], includeExternalPackageLabel: true })
 const reprintState = ref<PackingLabelPrintState>('idle')
 const reprintError = ref('')
-let simulatedPrintFailureShown = false
 
 const tabs: TabItem[] = [
   { value: 'awaiting', label: 'Aguardando conferência' },
   { value: 'packed', label: 'Embalados' }
 ]
 
-const availableSnapshot = computed(() => mockScenario === 'sem-embalagens'
-  ? { ...snapshot.value, awaiting: [], packed: [], awaitingItemCount: 0, packedItemCount: 0, restrictionCount: 0 }
-  : snapshot.value)
+const availableSnapshot = computed(() => snapshot.value)
 
 const selectedOrders = computed(() => activeTab.value === 'awaiting'
   ? availableSnapshot.value.awaiting
@@ -92,7 +97,7 @@ const filteredOrders = computed(() => selectedOrders.value.filter((order) => {
 }))
 
 const groupedOrders = computed(() => {
-  const groups = new Map<string, OrderDetail[]>()
+  const groups = new Map<string, PackingViewOrder[]>()
   for (const order of filteredOrders.value) {
     const window = order.deliveryWindow ?? 'Sem janela de entrega'
     groups.set(window, [...(groups.get(window) ?? []), order])
@@ -108,8 +113,65 @@ const pendingPackingLabelCount = computed(() => pendingPacking.value
   : 0)
 const canReprint = computed(() => selectedReprintCount.value > 0 && reprintState.value !== 'printing')
 
-function refresh() {
-  snapshot.value = getPackingSnapshot()
+function toViewOrder(order: ApiPackingOrder): PackingViewOrder {
+  return {
+    id: order.id,
+    api: order,
+    customer: {
+      name: order.customerName,
+      phone: order.customerPhone ?? 'Contato não integrado',
+      channel: order.customerPhone ? 'Telefone' : 'Balcão'
+    },
+    deliveryWindow: order.deliveryWindow,
+    items: order.items.flatMap(item => Array.from({ length: item.quantity }, (_, unit) => ({
+      id: `${item.id}-${unit + 1}`,
+      offerId: item.id,
+      name: item.name,
+      price: 0,
+      details: item.detailLines,
+      additions: [],
+      fulfillmentSource: item.isFrozen ? 'frozen-stock' : 'daily-production',
+      frozenStock: item.isFrozen ? {
+        configurationId: item.id,
+        producibleItemId: item.id,
+        producibleName: item.name,
+        presentation: item.presentation ?? '',
+        unitPrice: 0,
+        allocationStatus: 'allocated',
+        allocations: []
+      } : undefined,
+      effectiveComponents: [],
+      customizations: item.attentionLines,
+      hasRestrictionConflict: false
+    }))),
+    packedAt: order.packedAt ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(order.packedAt)) : undefined,
+    packedBy: order.packedBy,
+    packingLabels: order.labels
+  }
+}
+
+async function refresh() {
+  if (!props.apiRequest) {
+    hasError.value = true
+    loadError.value = 'A sessão autenticada da API não está disponível.'
+    return
+  }
+  try {
+    const result = await getPackingQueue(props.apiRequest)
+    snapshot.value = {
+      awaiting: result.awaiting.map(toViewOrder),
+      packed: result.packed.map(toViewOrder),
+      awaitingItemCount: result.awaitingItemCount,
+      packedItemCount: result.packedItemCount,
+      restrictionCount: result.attentionCount
+    }
+    hasError.value = false
+    loadError.value = ''
+  }
+  catch (error) {
+    hasError.value = true
+    loadError.value = error instanceof Error ? error.message : 'Não foi possível carregar a fila de embalagem.'
+  }
 }
 
 function updateTab(value: string) {
@@ -132,34 +194,14 @@ function itemPresentation(item: OrderItem) {
   return item.fulfillmentSource === 'frozen-stock' ? item.frozenStock?.presentation : undefined
 }
 
-function createPrintRecord(
-  selection: PackingLabelPrintSelection,
-  status: 'success' | 'error',
-  errorMessage?: string
-) {
-  return {
-    id: `packing-print-${Date.now()}`,
-    occurredAt: new Date().toISOString(),
-    responsibleName: 'Ana',
-    dailyItemLabelIds: [...selection.dailyItemLabelIds],
-    includedExternalPackageLabel: selection.includeExternalPackageLabel,
-    status,
-    errorMessage
-  }
-}
-
 async function runPrint(bundle: PackingLabelBundle, selection: PackingLabelPrintSelection) {
-  if (mockScenario === 'impressao-erro' && !simulatedPrintFailureShown) {
-    simulatedPrintFailureShown = true
-    throw new Error('A impressora demonstrativa não respondeu. Tente novamente.')
-  }
   await printPackingLabels({ bundle, selection })
 }
 
-function startPacking(order: OrderDetail) {
+function startPacking(order: PackingViewOrder) {
   if (printingOrderId.value) return
   const bundle = createPackingLabelBundle(order)
-  pendingPacking.value = { order, bundle, selection: fullPackingLabelSelection(bundle) }
+  pendingPacking.value = { order, bundle, selection: fullPackingLabelSelection(bundle), idempotencyKey: crypto.randomUUID() }
   feedback.value = undefined
   if (usesDirectZebraPackingPrint()) void finishPacking()
   else packingDialogOpen.value = true
@@ -175,29 +217,52 @@ async function finishPacking() {
   const pending = pendingPacking.value
   if (!pending || printingOrderId.value) return
 
-  const { order, bundle, selection } = pending
+  const { order } = pending
 
   printingOrderId.value = order.id
   feedback.value = undefined
-  let updatedOrder = markOrderPacked(order, bundle)
-  refresh()
 
   try {
-    await runPrint(bundle, selection)
-    updatedOrder = recordPackingLabelPrint(updatedOrder, createPrintRecord(selection, 'success'))
-    feedback.value = {
-      variant: 'success',
-      title: `Pedido #${order.id} embalado`,
-      description: `${selection.dailyItemLabelIds.length} etiqueta(s) de item e 1 etiqueta do pacote foram enviadas para impressão.`
+    if (!props.apiRequest) throw new Error('A sessão autenticada da API não está disponível.')
+    const packed = await packOrder(props.apiRequest, order.api, pending.idempotencyKey)
+    if (!packed.labels) throw new Error('A API não retornou o snapshot histórico das etiquetas.')
+    const bundle = packed.labels
+    const selection = fullPackingLabelSelection(bundle)
+    try {
+      await runPrint(bundle, selection)
+    }
+    catch (error) {
+      const message = error instanceof Error ? error.message : 'Não foi possível imprimir as etiquetas.'
+      await recordLabelPrint(props.apiRequest, order.id, selection, 'Failed', message).catch(() => undefined)
+      feedback.value = {
+        variant: 'danger',
+        title: `Pedido #${order.id} foi embalado, mas a impressão falhou`,
+        description: `${message} Use “Reimprimir etiquetas” no pedido embalado.`
+      }
+      return
+    }
+    try {
+      await recordLabelPrint(props.apiRequest, order.id, selection, 'Succeeded')
+      feedback.value = {
+        variant: 'success',
+        title: `Pedido #${order.id} embalado`,
+        description: `${selection.dailyItemLabelIds.length} etiqueta(s) de item e 1 etiqueta do pacote foram enviadas para impressão.`
+      }
+    }
+    catch (error) {
+      feedback.value = {
+        variant: 'danger',
+        title: `Pedido #${order.id} foi embalado e impresso`,
+        description: `${error instanceof Error ? error.message : 'Não foi possível registrar a impressão.'} Atualize a fila antes de reimprimir.`
+      }
     }
   }
   catch (error) {
     const message = error instanceof Error ? error.message : 'Não foi possível imprimir as etiquetas.'
-    recordPackingLabelPrint(updatedOrder, createPrintRecord(selection, 'error', message))
     feedback.value = {
       variant: 'danger',
-      title: `Pedido #${order.id} foi embalado, mas a impressão falhou`,
-      description: `${message} Use “Reimprimir etiquetas” no pedido embalado.`
+      title: `Não foi possível embalar o pedido #${order.id}`,
+      description: message
     }
   }
   finally {
@@ -208,13 +273,10 @@ async function finishPacking() {
   }
 }
 
-function openReprintDialog(order: OrderDetail) {
-  let storedOrder = order
-  if (!storedOrder.packingLabels)
-    storedOrder = savePackingLabelSnapshot(storedOrder, createPackingLabelBundle(storedOrder))
-
-  reprintOrder.value = storedOrder
-  reprintSelection.value = fullPackingLabelSelection(storedOrder.packingLabels!)
+function openReprintDialog(order: PackingViewOrder) {
+  if (!order.packingLabels) return
+  reprintOrder.value = order
+  reprintSelection.value = fullPackingLabelSelection(order.packingLabels)
   reprintState.value = 'idle'
   reprintError.value = ''
   reprintDialogOpen.value = true
@@ -236,25 +298,25 @@ async function reprintLabels() {
   reprintError.value = ''
   try {
     await runPrint(bundle, reprintSelection.value)
-    reprintOrder.value = recordPackingLabelPrint(order, createPrintRecord(reprintSelection.value, 'success'))
+    if (!props.apiRequest) throw new Error('A sessão autenticada da API não está disponível.')
+    await recordLabelPrint(props.apiRequest, order.id, reprintSelection.value, 'Succeeded')
     reprintState.value = 'success'
     refresh()
   }
   catch (error) {
     reprintError.value = error instanceof Error ? error.message : 'Não foi possível imprimir as etiquetas.'
-    reprintOrder.value = recordPackingLabelPrint(order, createPrintRecord(reprintSelection.value, 'error', reprintError.value))
+    if (props.apiRequest)
+      await recordLabelPrint(props.apiRequest, order.id, reprintSelection.value, 'Failed', reprintError.value).catch(() => undefined)
     reprintState.value = 'error'
     refresh()
   }
 }
 
 function retry() {
-  hasError.value = false
-  refresh()
+  void refresh()
 }
 
-onMounted(() => window.addEventListener('storage', refresh))
-onBeforeUnmount(() => window.removeEventListener('storage', refresh))
+onMounted(() => { void refresh() })
 </script>
 
 <template>
@@ -323,7 +385,7 @@ onBeforeUnmount(() => window.removeEventListener('storage', refresh))
       v-if="hasError"
       class="mt-4 bg-white"
       title="Não foi possível carregar a fila"
-      description="Tente novamente para consultar os pedidos em embalagem.">
+      :description="loadError || 'Tente novamente para consultar os pedidos em embalagem.'">
       <template #icon><TriangleAlertIcon /></template>
       <template #action><Button variant="secondary" @click="retry">Tentar novamente</Button></template>
     </EmptyState>
@@ -414,6 +476,10 @@ onBeforeUnmount(() => window.removeEventListener('storage', refresh))
             <template #footer>
               <div v-if="order.packedAt" class="w-full">
                 <p class="text-sm text-slate-600">{{ order.packedAt }} · {{ order.packedBy }}</p>
+                <p v-if="order.api.printAttempts[0]" class="mt-1 text-xs text-slate-500">
+                  Última impressão: {{ order.api.printAttempts[0].status === 'Succeeded' ? 'sucesso' : 'falha' }} ·
+                  {{ new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(order.api.printAttempts[0].attemptedAt)) }}
+                </p>
                 <div class="mt-3 flex items-center justify-between gap-3">
                   <a :href="`/operacoes/pedidos/${order.id}`" class="inline-flex text-sm font-medium text-slate-400 hover:text-slate-800">Ver pedido</a>
                   <Button class="ml-auto shrink-0" size="small" variant="secondary" @click="openReprintDialog(order)">

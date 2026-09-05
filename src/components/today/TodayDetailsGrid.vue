@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ArrowRightIcon, Badge, Card, EmptyState } from '@thiagoschoeffel/ts-components'
 import { getPublishedMenu, localDateIso } from '../../mocks/dailyMenu'
-import { getPackingSnapshot } from '../../mocks/packing'
+import { getPackingQueue, getProductionSnapshot, type ApiPackingQueue, type ApiProductionSnapshot } from '../../services/operationsApi'
+import type { AuthenticatedApiRequest } from '../../services/ordersApi'
+
+const props = defineProps<{ apiRequest?: AuthenticatedApiRequest }>()
 
 const menu = getPublishedMenu()
 const menuOptions = computed(() => (menu?.options ?? []).map(option => ({
@@ -13,18 +16,29 @@ const menuOptions = computed(() => (menu?.options ?? []).map(option => ({
 } as const)))
 const menuHref = `/cardapios/${menu?.date ?? localDateIso()}`
 
-const productionItems = [
-  { label: 'Estrogonofe', quantity: 36, unit: 'porções' },
-  { label: 'Frango', quantity: 12, unit: 'porções' },
-  { label: 'Salada P', quantity: 22, unit: 'unidades' }
-]
+const production = ref<ApiProductionSnapshot>()
+const packing = ref<ApiPackingQueue>()
+onMounted(async () => {
+  if (!props.apiRequest) return
+  try {
+    [production.value, packing.value] = await Promise.all([
+      getProductionSnapshot(props.apiRequest),
+      getPackingQueue(props.apiRequest)
+    ])
+  }
+  catch { /* As páginas dedicadas oferecem a retentativa operacional. */ }
+})
+const productionItems = computed(() => (production.value?.needs ?? []).slice(0, 3).map(item => ({
+  label: item.name,
+  quantity: item.quantity,
+  unit: item.unit
+})))
 
-const packing = getPackingSnapshot()
-const packagingItems = [
-  { label: 'aguardando conferência', quantity: packing.awaiting.length },
-  { label: 'itens pendentes', quantity: packing.awaitingItemCount },
-  { label: 'prontos para rota', quantity: packing.packed.length }
-]
+const packagingItems = computed(() => [
+  { label: 'aguardando conferência', quantity: packing.value?.awaiting.length ?? 0 },
+  { label: 'itens pendentes', quantity: packing.value?.awaitingItemCount ?? 0 },
+  { label: 'embalados', quantity: packing.value?.packed.length ?? 0 }
+])
 
 const routeItems = [
   { label: 'pedidos sem rota', quantity: 8 },

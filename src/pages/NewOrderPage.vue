@@ -32,6 +32,7 @@ const customerOptions = [
 const customerSelectOptions = computed(() => customerOptions.some(option => option.value === customerId.value)
   ? customerOptions
   : [{ value: customerId.value, label: `Cliente ${customerId.value.slice(0, 8).toUpperCase()}`, description: 'Identificador externo preservado no Pedido' }, ...customerOptions])
+const customerName = computed(() => customerSelectOptions.value.find(option => option.value === customerId.value)?.label)
 const offerOptions = computed(() => context.value?.offers.map(offer => ({ value: offer.id, label: offer.name, description: offer.fulfillmentMode === 'FrozenStock' ? 'Atendido por estoque congelado' : 'Produção diária' })) ?? [])
 const producibleOptions = computed(() => context.value?.producibles.map(item => ({ value: item.id, label: item.name })) ?? [])
 const selectedOffer = computed(() => context.value?.offers.find(item => item.id === selectedOfferId.value))
@@ -110,7 +111,7 @@ async function submit() {
   saving.value = true
   error.value = ''
   try {
-    const saved = await saveOrder(props.apiRequest, { id: props.mode === 'edit' ? props.orderId : undefined, customerId: customerId.value, operationalDate: operationalDate.value, expectedVersion: version.value, items: items.value, idempotencyKey: saveIdempotencyKey.value })
+    const saved = await saveOrder(props.apiRequest, { id: props.mode === 'edit' ? props.orderId : undefined, customerId: customerId.value, customerName: customerName.value, operationalDate: operationalDate.value, expectedVersion: version.value, items: items.value, idempotencyKey: saveIdempotencyKey.value })
     success.value = props.mode === 'edit' ? 'Alterações salvas na API.' : 'Pedido criado como aberto na API.'
     setTimeout(() => navigate(`/operacoes/pedidos/${saved.id}?retorno=${encodeURIComponent(returnUrl())}`), 500)
   }

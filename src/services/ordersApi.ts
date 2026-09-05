@@ -20,6 +20,7 @@ export interface ApiOrderItem {
 export interface ApiOrderSummary {
   id: string
   customerId: string
+  customerName?: string
   operationalDate: string
   status: ApiOrderStatus
   version: number
@@ -137,6 +138,7 @@ export async function getDailyCapacity(request: AuthenticatedApiRequest, operati
 export function saveOrder(request: AuthenticatedApiRequest, input: {
   id?: string
   customerId: string
+  customerName?: string
   operationalDate: string
   expectedVersion?: number
   items: OrderItemInput[]
@@ -148,6 +150,7 @@ export function saveOrder(request: AuthenticatedApiRequest, input: {
     headers: { ...jsonHeaders, 'Idempotency-Key': input.idempotencyKey ?? crypto.randomUUID() },
     body: JSON.stringify({
       customerId: input.customerId,
+      customerName: input.customerName,
       operationalDate: input.operationalDate,
       items: input.items,
       ...(input.id ? { expectedVersion: input.expectedVersion } : {})

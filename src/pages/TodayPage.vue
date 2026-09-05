@@ -13,6 +13,6 @@ defineProps<{ apiRequest?: AuthenticatedApiRequest }>()
     <TodaySummaryCards :api-request="apiRequest" />
     <AttentionCard />
     <DayFlowCard />
-    <TodayDetailsGrid />
+    <TodayDetailsGrid :api-request="apiRequest" />
   </div>
 </template>

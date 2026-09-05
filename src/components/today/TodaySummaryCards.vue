@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ArrowRightIcon, Card, Progress, TriangleAlertIcon } from '@thiagoschoeffel/ts-components'
-import { getPackingSnapshot } from '../../mocks/packing'
 import { getDailyCapacity, listOrders, type ApiDailyCapacity, type ApiOrderSummary, type AuthenticatedApiRequest } from '../../services/ordersApi'
+import { getPackingQueue, type ApiPackingQueue } from '../../services/operationsApi'
 
 const props = defineProps<{ apiRequest?: AuthenticatedApiRequest }>()
 
@@ -24,16 +24,17 @@ interface SummaryCard {
   }
 }
 
-const packing = getPackingSnapshot()
+const packing = ref<ApiPackingQueue>()
 const orders = ref<ApiOrderSummary[]>([])
 const capacity = ref<ApiDailyCapacity>()
 const today = new Date().toLocaleDateString('en-CA')
 onMounted(async () => {
   if (!props.apiRequest) return
   try {
-    [orders.value, capacity.value] = await Promise.all([
+    [orders.value, capacity.value, packing.value] = await Promise.all([
       listOrders(props.apiRequest),
-      getDailyCapacity(props.apiRequest, today)
+      getDailyCapacity(props.apiRequest, today),
+      getPackingQueue(props.apiRequest, today)
     ])
   }
   catch { /* Cada página de destino mantém sua própria retentativa detalhada. */ }
@@ -62,7 +63,7 @@ const summaries = computed<SummaryCard[]>(() => [
   },
   {
     label: 'Embalagem',
-    primary: String(packing.awaiting.length),
+    primary: String(packing.value?.awaiting.length ?? 0),
     secondary: 'aguardando',
     footerLabel: 'Abrir fila',
     action: { label: 'Abrir fila', href: '/operacoes/embalagem' }
