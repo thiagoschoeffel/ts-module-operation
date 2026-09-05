@@ -1,7 +1,7 @@
 export interface DailyItemLabelSnapshot {
   id: string
   orderItemId: string
-  orderId: number
+  orderId: string
   customerName: string
   productName: string
   detailLines: string[]
@@ -10,7 +10,7 @@ export interface DailyItemLabelSnapshot {
 
 export interface ExternalPackageLabelSnapshot {
   id: string
-  orderId: number
+  orderId: string
   customerName: string
   phone?: string
   addressLines: string[]

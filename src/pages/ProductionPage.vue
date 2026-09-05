@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { Badge, Button, Card, ChevronLeftIcon, CookingPotIcon, EmptyState, TriangleAlertIcon } from '@thiagoschoeffel/ts-components'
-import { getProductionSnapshot } from '../mocks/production'
+import { Alert, Badge, Button, Card, ChevronLeftIcon, CookingPotIcon, EmptyState, TriangleAlertIcon } from '@thiagoschoeffel/ts-components'
+import { getProductionSnapshot, type ApiProductionSnapshot } from '../services/operationsApi'
+import type { AuthenticatedApiRequest } from '../services/ordersApi'
+
+const props = defineProps<{ apiRequest?: AuthenticatedApiRequest }>()
 
 const REFRESH_INTERVAL = 15_000
 const TV_ROTATION_INTERVAL = 10_000
 const board = ref<HTMLElement>()
-const snapshot = ref(getProductionSnapshot())
+const snapshot = ref<ApiProductionSnapshot>({ orderCount: 0, mealCount: 0, inProductionCount: 0, customizationCount: 0, needs: [], updatedAt: new Date().toISOString() })
+const loadError = ref('')
 const now = ref(new Date())
 const isTvMode = ref(false)
 const tvColumns = ref(3)
@@ -24,7 +28,7 @@ const currentTime = computed(() => new Intl.DateTimeFormat('pt-BR', {
 const updatedTime = computed(() => new Intl.DateTimeFormat('pt-BR', {
   hour: '2-digit',
   minute: '2-digit'
-}).format(snapshot.value.updatedAt))
+}).format(new Date(snapshot.value.updatedAt)))
 const tvPageSize = computed(() => tvColumns.value * tvRows.value)
 const tvPageCount = computed(() => Math.max(1, Math.ceil(snapshot.value.needs.length / tvPageSize.value)))
 const visibleNeeds = computed(() => {
@@ -39,8 +43,18 @@ const needsCounter = computed(() => {
   return `Tela ${currentTvPage.value + 1} de ${tvPageCount.value} · alternância automática`
 })
 
-function refresh() {
-  snapshot.value = getProductionSnapshot()
+async function refresh() {
+  if (!props.apiRequest) {
+    loadError.value = 'A sessão autenticada da API não está disponível.'
+    return
+  }
+  try {
+    snapshot.value = await getProductionSnapshot(props.apiRequest)
+    loadError.value = ''
+  }
+  catch (error) {
+    loadError.value = error instanceof Error ? error.message : 'Não foi possível atualizar a produção.'
+  }
   if (currentTvPage.value >= tvPageCount.value)
     currentTvPage.value = 0
 }
@@ -98,7 +112,6 @@ function handleVisibilityChange() {
 onMounted(() => {
   refreshTimer = setInterval(refresh, REFRESH_INTERVAL)
   clockTimer = setInterval(() => { now.value = new Date() }, 1_000)
-  window.addEventListener('storage', refresh)
   window.addEventListener('resize', updateTvLayout)
   document.addEventListener('visibilitychange', handleVisibilityChange)
   document.addEventListener('fullscreenchange', syncTvMode)
@@ -108,7 +121,6 @@ onBeforeUnmount(() => {
   if (refreshTimer) clearInterval(refreshTimer)
   if (clockTimer) clearInterval(clockTimer)
   stopTvRotation()
-  window.removeEventListener('storage', refresh)
   window.removeEventListener('resize', updateTvLayout)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   document.removeEventListener('fullscreenchange', syncTvMode)
@@ -151,6 +163,10 @@ onBeforeUnmount(() => {
         Exibir no modo TV
       </Button>
     </div>
+
+    <Alert v-if="loadError" class="mb-4" variants="danger" title="Não foi possível carregar a produção" :description="loadError">
+      <template #icon><TriangleAlertIcon /></template>
+    </Alert>
 
     <div class="grid shrink-0 grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
       <Card>

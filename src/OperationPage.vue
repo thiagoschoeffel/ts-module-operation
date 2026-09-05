@@ -136,8 +136,8 @@ function returnToOrders() {
         v-else-if="props.section === 'pedidos' && props.orderPage === 'detail'"
         :order-id="props.orderId"
         :api-request="props.apiRequest" />
-      <ProductionPage v-else-if="props.section === 'producao'" />
-      <PackingPage v-else-if="props.section === 'embalagem'" />
+      <ProductionPage v-else-if="props.section === 'producao'" :api-request="props.apiRequest" />
+      <PackingPage v-else-if="props.section === 'embalagem'" :api-request="props.apiRequest" />
       <DeliveryPage v-else-if="props.section === 'entregas'" />
       <OperationPlaceholderPage v-else :title="page.title" />
     </main>
