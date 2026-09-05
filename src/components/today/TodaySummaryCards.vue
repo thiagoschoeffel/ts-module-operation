@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { ArrowRightIcon, Card, Progress, TriangleAlertIcon } from '@thiagoschoeffel/ts-components'
 import { getDailyCapacity, listOrders, type ApiDailyCapacity, type ApiOrderSummary, type AuthenticatedApiRequest } from '../../services/ordersApi'
 import { getPackingQueue, type ApiPackingQueue } from '../../services/operationsApi'
+import { getLogistics, type LogisticsSnapshot } from '../../services/logisticsApi'
 
 const props = defineProps<{ apiRequest?: AuthenticatedApiRequest }>()
 
@@ -27,14 +28,16 @@ interface SummaryCard {
 const packing = ref<ApiPackingQueue>()
 const orders = ref<ApiOrderSummary[]>([])
 const capacity = ref<ApiDailyCapacity>()
+const logistics = ref<LogisticsSnapshot>()
 const today = new Date().toLocaleDateString('en-CA')
 onMounted(async () => {
   if (!props.apiRequest) return
   try {
-    [orders.value, capacity.value, packing.value] = await Promise.all([
+    [orders.value, capacity.value, packing.value, logistics.value] = await Promise.all([
       listOrders(props.apiRequest),
       getDailyCapacity(props.apiRequest, today),
-      getPackingQueue(props.apiRequest, today)
+      getPackingQueue(props.apiRequest, today),
+      getLogistics(props.apiRequest)
     ])
   }
   catch { /* Cada página de destino mantém sua própria retentativa detalhada. */ }
@@ -70,11 +73,11 @@ const summaries = computed<SummaryCard[]>(() => [
   },
   {
     label: 'Entregas',
-    primary: '18',
+    primary: String(logistics.value?.routes.flatMap(route => route.stops).filter(stop => stop.result === 'Succeeded').length ?? 0),
     secondary: 'concluídas',
-    footerLabel: 'Ver 1 falha',
-    hasAlert: true,
-    action: { label: 'Ver 1 falha', href: '/operacoes/entregas' }
+    footerLabel: logistics.value?.routes.some(route => route.stops.some(stop => stop.result === 'Failed')) ? 'Ver falhas' : 'Ver logística',
+    hasAlert: logistics.value?.routes.some(route => route.stops.some(stop => stop.result === 'Failed')),
+    action: { label: 'Ver logística', href: '/operacoes/entregas' }
   }
 ])
 </script>
