@@ -2,6 +2,25 @@ export type AuthenticatedApiRequest = (path: string, init?: RequestInit) => Prom
 
 export type ApiOrderStatus = 'Open' | 'Confirmed' | 'InProduction' | 'InPacking' | 'InDelivery' | 'Completed' | 'Cancelled' | 'DeliveryFailed'
 export type ApiFulfillmentMode = 'DailyProduction' | 'FrozenStock'
+export type ApiOrderFulfillmentType = 'Delivery' | 'Pickup'
+
+export interface ApiOrderFulfillment {
+  type?: ApiOrderFulfillmentType
+  contactName?: string
+  phone?: string
+  addressLabel?: string
+  street?: string
+  number?: string
+  complement?: string
+  neighborhood?: string
+  city?: string
+  state?: string
+  postalCode?: string
+  reference?: string
+  deliveryWindow?: string
+  frozenAt?: string
+  isComplete: boolean
+}
 
 export interface ApiOrderItem {
   id: string
@@ -31,6 +50,7 @@ export interface ApiOrderSummary {
 
 export interface ApiOrderDetails extends Omit<ApiOrderSummary, 'itemCount'> {
   items: ApiOrderItem[]
+  fulfillment: ApiOrderFulfillment
   confirmation?: {
     confirmedAt: string
     subtotal: number
@@ -69,7 +89,12 @@ export interface ApiDailyCapacity {
 }
 
 export interface ApiOrderAuthoringContext {
-  customers: Array<{ id: string, name: string, phone: string }>
+  customers: Array<{
+    id: string
+    name: string
+    phone: string
+    addresses: Array<{ id: string, label: string, street: string, number?: string, complement?: string, neighborhood?: string, city?: string, state?: string, postalCode?: string, reference?: string }>
+  }>
   offers: Array<{ id: string, name: string, fulfillmentMode: ApiFulfillmentMode, effectivePrice?: number, requiresMenuChoice: boolean }>
   producibles: Array<{ id: string, name: string }>
   menuOptions: Array<{ id: string, category: string, producibleItemId: string, producibleItemName: string, availability: 'Available' | 'SoldOut' | 'Suspended' }>
@@ -144,6 +169,7 @@ export function saveOrder(request: AuthenticatedApiRequest, input: {
   operationalDate: string
   expectedVersion?: number
   items: OrderItemInput[]
+  fulfillment: { type: ApiOrderFulfillmentType, phone: string, addressId?: string, deliveryWindow?: string }
   idempotencyKey?: string
 }) {
   const path = input.id ? `/api/orders/${encodeURIComponent(input.id)}` : '/api/orders'
@@ -155,6 +181,7 @@ export function saveOrder(request: AuthenticatedApiRequest, input: {
       customerName: input.customerName,
       operationalDate: input.operationalDate,
       items: input.items,
+      fulfillment: input.fulfillment,
       ...(input.id ? { expectedVersion: input.expectedVersion } : {})
     })
   })

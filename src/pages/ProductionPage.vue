@@ -11,6 +11,9 @@ const TV_ROTATION_INTERVAL = 10_000
 const board = ref<HTMLElement>()
 const snapshot = ref<ApiProductionSnapshot>({ orderCount: 0, mealCount: 0, inProductionCount: 0, customizationCount: 0, needs: [], updatedAt: new Date().toISOString() })
 const loadError = ref('')
+const isInitialLoading = ref(true)
+const isRefreshing = ref(false)
+const hasLoadedData = ref(false)
 const now = ref(new Date())
 const isTvMode = ref(false)
 const tvColumns = ref(3)
@@ -19,6 +22,7 @@ const currentTvPage = ref(0)
 let refreshTimer: ReturnType<typeof setInterval> | undefined
 let clockTimer: ReturnType<typeof setInterval> | undefined
 let tvRotationTimer: ReturnType<typeof setInterval> | undefined
+let refreshSequence = 0
 
 const currentTime = computed(() => new Intl.DateTimeFormat('pt-BR', {
   hour: '2-digit',
@@ -44,16 +48,27 @@ const needsCounter = computed(() => {
 })
 
 async function refresh() {
+  if (isRefreshing.value) return
+  const sequence = ++refreshSequence
+  isRefreshing.value = true
   if (!props.apiRequest) {
     loadError.value = 'A sessão autenticada da API não está disponível.'
+    isInitialLoading.value = false
+    isRefreshing.value = false
     return
   }
   try {
-    snapshot.value = await getProductionSnapshot(props.apiRequest)
+    const nextSnapshot = await getProductionSnapshot(props.apiRequest)
+    if (sequence === refreshSequence) snapshot.value = nextSnapshot
+    hasLoadedData.value = true
     loadError.value = ''
   }
   catch (error) {
     loadError.value = error instanceof Error ? error.message : 'Não foi possível atualizar a produção.'
+  }
+  finally {
+    isInitialLoading.value = false
+    isRefreshing.value = false
   }
   if (currentTvPage.value >= tvPageCount.value)
     currentTvPage.value = 0
@@ -106,11 +121,12 @@ function startTvRotation() {
 
 function handleVisibilityChange() {
   if (!document.hidden)
-    refresh()
+    void refresh()
 }
 
 onMounted(() => {
-  refreshTimer = setInterval(refresh, REFRESH_INTERVAL)
+  void refresh()
+  refreshTimer = setInterval(() => void refresh(), REFRESH_INTERVAL)
   clockTimer = setInterval(() => { now.value = new Date() }, 1_000)
   window.addEventListener('resize', updateTvLayout)
   document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -155,7 +171,7 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
-    <div class="ts-responsive-row mb-4 shrink-0 gap-3">
+    <div v-if="!isInitialLoading" class="ts-responsive-row mb-4 shrink-0 gap-3">
       <p class="text-sm text-slate-500" role="status" aria-live="polite">
         Atualizado às {{ updatedTime }} · atualiza a cada 15 segundos
       </p>
@@ -164,10 +180,19 @@ onBeforeUnmount(() => {
       </Button>
     </div>
 
-    <Alert v-if="loadError" class="mb-4" variants="danger" title="Não foi possível carregar a produção" :description="loadError">
+    <div v-if="isInitialLoading" class="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4" role="status" aria-label="Carregando produção">
+      <div v-for="index in 4" :key="index" class="h-28 animate-pulse rounded-lg border border-slate-200 bg-white" />
+    </div>
+
+    <Alert v-else-if="loadError && !hasLoadedData" class="mb-4" variants="danger" title="Não foi possível carregar a produção" :description="loadError">
       <template #icon><TriangleAlertIcon /></template>
     </Alert>
 
+    <Alert v-else-if="loadError" class="mb-4" variants="warning" title="Dados temporariamente desatualizados" :description="loadError">
+      <template #icon><TriangleAlertIcon /></template>
+    </Alert>
+
+    <template v-if="!isInitialLoading">
     <div class="grid shrink-0 grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
       <Card>
         <p class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-400">Refeições</p>
@@ -243,6 +268,7 @@ onBeforeUnmount(() => {
         </div>
       </Card>
     </div>
+    </template>
   </section>
 </template>
 

@@ -1,5 +1,26 @@
-import type { CustomerAddress, OrderItem } from '../components/new-order/types'
 import type { PackingLabelBundle } from '../types/packingLabels'
+
+export interface PackingLabelAddressSource {
+  street: string
+  number: string
+  complement?: string
+  neighborhood: string
+  city: string
+  state: string
+  postalCode: string
+  referencePoint?: string
+}
+
+export interface PackingLabelItemSource {
+  id: string
+  name: string
+  details: string[]
+  customizations: string[]
+  additions: string[]
+  fulfillmentSource: 'daily-production' | 'frozen-stock'
+  frozenStock?: { producibleName: string, presentation: string }
+  hasRestrictionConflict: boolean
+}
 
 export interface PackingLabelOrderSource {
   id: string | number
@@ -9,8 +30,8 @@ export interface PackingLabelOrderSource {
     channel: 'WhatsApp' | 'Telefone' | 'Balcão'
     restriction?: string
   }
-  deliveryAddress?: CustomerAddress
-  items: OrderItem[]
+  deliveryAddress?: PackingLabelAddressSource
+  items: PackingLabelItemSource[]
 }
 
 function toPlainText(value: string) {
@@ -33,13 +54,13 @@ function uniqueLines(lines: Array<string | undefined>) {
   return [...new Set(lines.map(line => line ? toPlainText(line) : '').filter(Boolean))]
 }
 
-function productName(item: OrderItem) {
+function productName(item: PackingLabelItemSource) {
   return item.fulfillmentSource === 'frozen-stock' && item.frozenStock
     ? `${item.frozenStock.producibleName} · ${item.frozenStock.presentation}`
     : item.name
 }
 
-function addressLines(address?: CustomerAddress) {
+function addressLines(address?: PackingLabelAddressSource) {
   if (!address) return []
   return [
     `${address.street}, ${address.number}${address.complement ? ` · ${address.complement}` : ''}`,

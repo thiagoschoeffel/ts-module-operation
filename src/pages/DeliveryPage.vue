@@ -24,7 +24,7 @@ const counts = computed(() => ({ planning: snapshot.value.routes.filter(x => x.s
 const failureOptions: SelectOption[] = ['Cliente ausente', 'Endereço incorreto', 'Acesso impedido', 'Cliente sem resposta', 'Outro motivo operacional'].map(value => ({ value, label: value }))
 
 async function load() { if (!props.apiRequest) { error.value = 'A sessão autenticada da API não está disponível.'; loading.value = false; return } loading.value = true; error.value = ''; try { snapshot.value = await getLogistics(props.apiRequest) } catch (reason) { error.value = reason instanceof Error ? reason.message : 'Não foi possível carregar as entregas.' } finally { loading.value = false } }
-function openNewRoute() { selectedDriverId.value = ''; selectedWindow.value = ''; selectedOrders.value = []; routeDrawer.value = true }
+function openNewRoute() { if (loading.value || error.value || !props.apiRequest) return; selectedDriverId.value = ''; selectedWindow.value = ''; selectedOrders.value = []; routeDrawer.value = true }
 function toggleOrder(id: string, value: boolean | 'indeterminate') { selectedOrders.value = value === true ? [...selectedOrders.value, id] : selectedOrders.value.filter(x => x !== id) }
 async function saveRoute(close: () => void) { if (!props.apiRequest || !selectedDriverId.value || !selectedWindow.value || !selectedOrders.value.length) return; saving.value = true; try { await createRoute(props.apiRequest, { date: eligibleOrders.value[0]!.date, deliveryWindow: selectedWindow.value, driverId: selectedDriverId.value, orderIds: selectedOrders.value }); feedback.value = 'Rota criada com sucesso.'; close(); await load() } catch (reason) { error.value = reason instanceof Error ? reason.message : 'Não foi possível criar a rota.' } finally { saving.value = false } }
 async function begin(route: DeliveryRoute) { if (!props.apiRequest) return; try { await startRoute(props.apiRequest, route); feedback.value = `Rota #${shortLogisticsId(route.id)} iniciada.`; activeTab.value = 'in-progress'; await load() } catch (reason) { error.value = reason instanceof Error ? reason.message : 'Não foi possível iniciar a rota.' } }
@@ -45,13 +45,14 @@ onMounted(load)
   <section class="md:flex md:h-full md:min-h-0 md:flex-col" aria-label="Entregas">
     <div class="ts-responsive-row gap-4">
       <PageHeader title="Entregas" subtitle="Planeje rotas e acompanhe cada pedido até a confirmação da entrega."><template #icon><TruckIcon :size="32" :stroke-width="1.75" /></template></PageHeader>
-      <Button v-if="activeTab === 'planning'" @click="openNewRoute">Nova rota</Button>
+      <Button v-if="activeTab === 'planning'" :disabled="loading || Boolean(error) || !props.apiRequest" @click="openNewRoute">Nova rota</Button>
     </div>
     <Alert v-if="feedback" class="mt-4" variants="success" :description="feedback" />
-    <Alert v-if="error" class="mt-4" variants="danger" title="Não foi possível concluir a operação" :description="error"><template #icon><TriangleAlertIcon /></template><template #action><Button size="small" variant="secondary" @click="load">Tentar novamente</Button></template></Alert>
+    <Alert v-if="error" class="mt-4" variants="danger" title="Não foi possível concluir a operação" :description="error"><template #icon><TriangleAlertIcon /></template><template #action><Button size="small" variant="secondary" :disabled="!props.apiRequest" @click="load">Tentar novamente</Button></template></Alert>
     <Card class="mt-6 md:min-h-0 md:flex-1 [&>div]:flex [&>div]:min-h-0 [&>div]:flex-col [&>div]:p-4">
       <Tabs v-model="activeTab" :tabs="tabs" aria-label="Etapas da logística"><template #badge="{ tab }"><Badge size="small" variant="neutral">{{ counts[tab.value as Tab] }}</Badge></template></Tabs>
       <div v-if="loading" class="mt-4 grid gap-4 lg:grid-cols-2"><div v-for="i in 4" :key="i" class="h-44 animate-pulse rounded-lg border border-slate-200 bg-slate-50" /></div>
+      <div v-else-if="error" />
       <EmptyState v-else-if="!visibleRoutes.length" class="mt-4" :title="activeTab === 'planning' ? 'Nenhuma rota planejada' : activeTab === 'in-progress' ? 'Nenhuma rota em andamento' : 'Nenhuma rota concluída'" :description="activeTab === 'planning' ? `${snapshot.availableOrders.length} pedidos estão disponíveis para planejamento.` : 'As rotas aparecerão aqui conforme forem executadas.'"><template #icon><TruckIcon /></template><template #action><Button v-if="activeTab === 'planning' && snapshot.availableOrders.length" size="small" @click="openNewRoute">Criar rota</Button></template></EmptyState>
       <div v-else class="mt-4 grid min-h-0 gap-4 overflow-auto lg:grid-cols-2">
         <Card v-for="route in visibleRoutes" :key="route.id">
