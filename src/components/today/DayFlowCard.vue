@@ -1,13 +1,30 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { ArrowRightIcon, Card, ScrollArea } from '@thiagoschoeffel/ts-components'
+import type { ApiOrderStatus } from '../../services/ordersApi'
+import type { TodaySnapshot } from '../../services/todayApi'
 
-const dayFlow = [
-  { label: 'Recebidos', value: 48, pending: '6 ainda abertos' },
-  { label: 'Confirmados', value: 42, pending: '6 aguardam produção' },
-  { label: 'Em produção', value: 36, pending: '7 aguardam embalagem' },
-  { label: 'Embalados', value: 29, pending: '11 em rota' },
-  { label: 'Entregues', value: 18 }
-]
+const props = defineProps<{ snapshot?: TodaySnapshot }>()
+const confirmedStatuses = new Set<ApiOrderStatus>(['Confirmed', 'InProduction', 'InPacking', 'InDelivery', 'Completed', 'DeliveryFailed'])
+const productionStatuses = new Set<ApiOrderStatus>(['InProduction', 'InPacking', 'InDelivery', 'Completed', 'DeliveryFailed'])
+const packedStatuses = new Set<ApiOrderStatus>(['InPacking', 'InDelivery', 'Completed', 'DeliveryFailed'])
+const pendingLabel = (count: number, singular: string, plural: string) => `${count} ${count === 1 ? singular : plural}`
+const dayFlow = computed(() => {
+  const date = props.snapshot?.operationalDate
+  const orders = props.snapshot?.orders.filter(order => order.operationalDate === date) ?? []
+  const open = orders.filter(order => order.status === 'Open').length
+  const awaitingProduction = orders.filter(order => order.status === 'Confirmed' && order.dailyCapacityUnits > 0).length
+  const awaitingPacking = orders.filter(order => order.status === 'InProduction').length
+  const inDelivery = orders.filter(order => order.status === 'InDelivery').length
+
+  return [
+    { label: 'Recebidos', value: orders.length, pending: pendingLabel(open, 'ainda aberto', 'ainda abertos') },
+    { label: 'Confirmados', value: orders.filter(order => confirmedStatuses.has(order.status)).length, pending: pendingLabel(awaitingProduction, 'aguarda produção', 'aguardam produção') },
+    { label: 'Em produção', value: orders.filter(order => order.dailyCapacityUnits > 0 && productionStatuses.has(order.status)).length, pending: pendingLabel(awaitingPacking, 'aguarda embalagem', 'aguardam embalagem') },
+    { label: 'Embalados', value: orders.filter(order => packedStatuses.has(order.status)).length, pending: pendingLabel(inDelivery, 'em rota', 'em rota') },
+    { label: 'Entregues', value: orders.filter(order => order.status === 'Completed').length }
+  ]
+})
 </script>
 
 <template>

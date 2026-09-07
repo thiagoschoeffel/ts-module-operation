@@ -1,57 +1,41 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed } from 'vue'
 import { ArrowRightIcon, Badge, Card, EmptyState } from '@thiagoschoeffel/ts-components'
-import { getPublishedMenu, localDateIso } from '../../mocks/dailyMenu'
-import { getPackingQueue, getProductionSnapshot, type ApiPackingQueue, type ApiProductionSnapshot } from '../../services/operationsApi'
-import type { AuthenticatedApiRequest } from '../../services/ordersApi'
-import { getLogistics, type LogisticsSnapshot } from '../../services/logisticsApi'
+import { localDateIso, type TodaySnapshot } from '../../services/todayApi'
 
-const props = defineProps<{ apiRequest?: AuthenticatedApiRequest }>()
+const props = defineProps<{ snapshot?: TodaySnapshot }>()
 
-const menu = getPublishedMenu()
-const menuOptions = computed(() => (menu?.options ?? []).map(option => ({
+const menu = computed(() => props.snapshot?.menu?.status === 'Published' ? props.snapshot.menu : undefined)
+const menuOptions = computed(() => (menu.value?.options ?? []).map(option => ({
   label: option.category,
   detail: option.producibleName,
-  status: option.availability === 'available' ? 'Disponível' : option.availability === 'sold-out' ? 'Esgotada' : 'Suspensa',
-  variant: option.availability === 'available' ? 'success' : option.availability === 'sold-out' ? 'warning' : 'danger'
+  status: option.availability === 'Available' ? 'Disponível' : option.availability === 'SoldOut' ? 'Esgotada' : 'Suspensa',
+  variant: option.availability === 'Available' ? 'success' : option.availability === 'SoldOut' ? 'warning' : 'danger'
 } as const)))
-const menuHref = `/cardapios/${menu?.date ?? localDateIso()}`
-
-const production = ref<ApiProductionSnapshot>()
-const packing = ref<ApiPackingQueue>()
-const logistics = ref<LogisticsSnapshot>()
-onMounted(async () => {
-  if (!props.apiRequest) return
-  try {
-    [production.value, packing.value, logistics.value] = await Promise.all([
-      getProductionSnapshot(props.apiRequest),
-      getPackingQueue(props.apiRequest),
-      getLogistics(props.apiRequest)
-    ])
-  }
-  catch { /* As páginas dedicadas oferecem a retentativa operacional. */ }
-})
-const productionItems = computed(() => (production.value?.needs ?? []).slice(0, 3).map(item => ({
+const menuHref = computed(() => `/cardapios/${props.snapshot?.operationalDate ?? localDateIso()}`)
+const productionItems = computed(() => (props.snapshot?.production?.needs ?? []).slice(0, 3).map(item => ({
   label: item.name,
   quantity: item.quantity,
   unit: item.unit
 })))
 
 const packagingItems = computed(() => [
-  { label: 'aguardando conferência', quantity: packing.value?.awaiting.length ?? 0 },
-  { label: 'itens pendentes', quantity: packing.value?.awaitingItemCount ?? 0 },
-  { label: 'embalados', quantity: packing.value?.packed.length ?? 0 }
+  { label: 'aguardando conferência', quantity: props.snapshot?.packing?.awaiting.length ?? 0 },
+  { label: 'itens pendentes', quantity: props.snapshot?.packing?.awaitingItemCount ?? 0 },
+  { label: 'embalados', quantity: props.snapshot?.packing?.packed.length ?? 0 }
 ])
 
+const routes = computed(() => props.snapshot?.logistics?.routes
+  .filter(route => route.date === props.snapshot?.operationalDate) ?? [])
 const routeItems = computed(() => [
-  { label: 'pedidos sem rota', quantity: logistics.value?.availableOrders.length ?? 0 },
-  { label: 'rotas planejadas', quantity: logistics.value?.routes.filter(x => x.status === 'Planned').length ?? 0 },
-  { label: 'rotas em execução', quantity: logistics.value?.routes.filter(x => x.status === 'InProgress').length ?? 0 }
+  { label: 'pedidos sem rota', quantity: props.snapshot?.logistics?.availableOrders.filter(order => order.date === props.snapshot?.operationalDate).length ?? 0 },
+  { label: 'rotas planejadas', quantity: routes.value.filter(route => route.status === 'Planned').length },
+  { label: 'rotas em execução', quantity: routes.value.filter(route => route.status === 'InProgress').length }
 ])
 
 const deliveryItems = computed(() => [
-  { label: 'entregues', quantity: logistics.value?.routes.flatMap(x => x.stops).filter(x => x.result === 'Succeeded').length ?? 0 },
-  { label: 'falhas', quantity: logistics.value?.routes.flatMap(x => x.stops).filter(x => x.result === 'Failed').length ?? 0 }
+  { label: 'entregues', quantity: routes.value.flatMap(route => route.stops).filter(stop => stop.result === 'Succeeded').length },
+  { label: 'falhas', quantity: routes.value.flatMap(route => route.stops).filter(stop => stop.result === 'Failed').length }
 ])
 </script>
 

@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed } from 'vue'
 import { ArrowRightIcon, Card, Progress, TriangleAlertIcon } from '@thiagoschoeffel/ts-components'
-import { getDailyCapacity, listOrders, type ApiDailyCapacity, type ApiOrderSummary, type AuthenticatedApiRequest } from '../../services/ordersApi'
-import { getPackingQueue, type ApiPackingQueue } from '../../services/operationsApi'
-import { getLogistics, type LogisticsSnapshot } from '../../services/logisticsApi'
+import type { TodaySnapshot } from '../../services/todayApi'
 
-const props = defineProps<{ apiRequest?: AuthenticatedApiRequest }>()
+const props = defineProps<{ snapshot?: TodaySnapshot }>()
+const todayRoutes = computed(() => props.snapshot?.logistics?.routes
+  .filter(route => route.date === props.snapshot?.operationalDate) ?? [])
 
 interface SummaryCard {
   label: string
@@ -25,58 +25,41 @@ interface SummaryCard {
   }
 }
 
-const packing = ref<ApiPackingQueue>()
-const orders = ref<ApiOrderSummary[]>([])
-const capacity = ref<ApiDailyCapacity>()
-const logistics = ref<LogisticsSnapshot>()
-const today = new Date().toLocaleDateString('en-CA')
-onMounted(async () => {
-  if (!props.apiRequest) return
-  try {
-    [orders.value, capacity.value, packing.value, logistics.value] = await Promise.all([
-      listOrders(props.apiRequest),
-      getDailyCapacity(props.apiRequest, today),
-      getPackingQueue(props.apiRequest, today),
-      getLogistics(props.apiRequest)
-    ])
-  }
-  catch { /* Cada página de destino mantém sua própria retentativa detalhada. */ }
-})
 const summaries = computed<SummaryCard[]>(() => [
   {
     label: 'Pedidos',
-    primary: String(orders.value.filter(order => order.operationalDate === today).length),
+    primary: String(props.snapshot?.orders.filter(order => order.operationalDate === props.snapshot?.operationalDate).length ?? 0),
     secondary: 'no dia operacional',
     footerLabel: 'Abrir pedidos',
     action: { label: 'Abrir pedidos', href: '/operacoes/pedidos' }
   },
   {
     label: 'Capacidade',
-    primary: capacity.value ? `${capacity.value.reservedUnits} / ${capacity.value.totalUnits}` : '—',
-    secondary: capacity.value ? `${capacity.value.availableUnits} restantes` : 'não configurada',
+    primary: props.snapshot?.capacity ? `${props.snapshot.capacity.reservedUnits} / ${props.snapshot.capacity.totalUnits}` : '—',
+    secondary: props.snapshot?.capacity ? `${props.snapshot.capacity.availableUnits} restantes` : 'não configurada',
     footerLabel: 'Ver pedidos',
-    hasAlert: capacity.value?.availableUnits === 0,
-    progress: capacity.value ? {
-      value: capacity.value.reservedUnits,
-      max: capacity.value.totalUnits,
+    hasAlert: props.snapshot?.capacity?.availableUnits === 0,
+    progress: props.snapshot?.capacity ? {
+      value: props.snapshot.capacity.reservedUnits,
+      max: props.snapshot.capacity.totalUnits,
       label: 'Capacidade utilizada',
-      variant: capacity.value.availableUnits === 0 ? 'danger' : 'info'
+      variant: props.snapshot.capacity.availableUnits === 0 ? 'danger' : 'info'
     } : undefined,
     action: { label: 'Ver pedidos', href: '/operacoes/pedidos' }
   },
   {
     label: 'Embalagem',
-    primary: String(packing.value?.awaiting.length ?? 0),
+    primary: String(props.snapshot?.packing?.awaiting.length ?? 0),
     secondary: 'aguardando',
     footerLabel: 'Abrir fila',
     action: { label: 'Abrir fila', href: '/operacoes/embalagem' }
   },
   {
     label: 'Entregas',
-    primary: String(logistics.value?.routes.flatMap(route => route.stops).filter(stop => stop.result === 'Succeeded').length ?? 0),
+    primary: String(todayRoutes.value.flatMap(route => route.stops).filter(stop => stop.result === 'Succeeded').length),
     secondary: 'concluídas',
-    footerLabel: logistics.value?.routes.some(route => route.stops.some(stop => stop.result === 'Failed')) ? 'Ver falhas' : 'Ver logística',
-    hasAlert: logistics.value?.routes.some(route => route.stops.some(stop => stop.result === 'Failed')),
+    footerLabel: todayRoutes.value.some(route => route.stops.some(stop => stop.result === 'Failed')) ? 'Ver falhas' : 'Ver logística',
+    hasAlert: todayRoutes.value.some(route => route.stops.some(stop => stop.result === 'Failed')),
     action: { label: 'Ver logística', href: '/operacoes/entregas' }
   }
 ])
