@@ -27,6 +27,10 @@ export interface TodaySnapshot {
   packing?: ApiPackingQueue
   logistics?: LogisticsSnapshot
   menu?: ApiDailyMenu
+  synchronization: {
+    failedSources: string[]
+    completedAt: string
+  }
 }
 
 export function localDateIso(date = new Date()) {
@@ -64,6 +68,14 @@ export async function loadTodaySnapshot(request: AuthenticatedApiRequest, operat
     production: valueOrUndefined(production),
     packing: valueOrUndefined(packing),
     logistics: valueOrUndefined(logistics),
-    menu: valueOrUndefined(menu)
+    menu: valueOrUndefined(menu),
+    synchronization: {
+      failedSources: [orders, capacity, production, packing, logistics, menu]
+        .map((result, index) => result.status === 'rejected'
+          ? ['pedidos', 'capacidade', 'produção', 'embalagem', 'entregas', 'cardápio'][index]
+          : undefined)
+        .filter((source): source is string => Boolean(source)),
+      completedAt: new Date().toISOString()
+    }
   }
 }

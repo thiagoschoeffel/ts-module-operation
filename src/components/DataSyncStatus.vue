@@ -1,5 +1,5 @@
 <script setup lang="ts">
-type SyncStatus = 'synced' | 'syncing' | 'error'
+type SyncStatus = 'synced' | 'syncing' | 'partial' | 'error'
 
 const props = withDefaults(defineProps<{ status?: SyncStatus }>(), {
   status: 'synced'
@@ -8,6 +8,7 @@ const props = withDefaults(defineProps<{ status?: SyncStatus }>(), {
 const statuses: Record<SyncStatus, { label: string; indicatorClass: string }> = {
   synced: { label: 'Dados sincronizados', indicatorClass: 'bg-emerald-500' },
   syncing: { label: 'Sincronizando dados', indicatorClass: 'bg-amber-500' },
+  partial: { label: 'Dados parcialmente atualizados', indicatorClass: 'bg-amber-500' },
   error: { label: 'Falha na sincronização', indicatorClass: 'bg-red-500' }
 }
 </script>

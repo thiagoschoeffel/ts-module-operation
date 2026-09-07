@@ -29,6 +29,7 @@ const props = withDefaults(
 
 const page = computed(() => operationPages[props.section])
 const attendanceQuota = ref<WhatsAppQuotaUsage>()
+const todaySyncStatus = ref<'synced' | 'syncing' | 'partial' | 'error'>('syncing')
 const pageTitle = computed(() => {
   if (props.section !== 'pedidos')
     return page.value.title
@@ -81,7 +82,7 @@ function returnToOrders() {
         </template>
       </PageHeader>
 
-      <DataSyncStatus v-if="props.section === 'hoje'" status="synced" />
+      <DataSyncStatus v-if="props.section === 'hoje'" :status="todaySyncStatus" />
 
       <WhatsAppQuotaSummary
         v-if="props.section === 'atendimento' && attendanceQuota"
@@ -113,7 +114,7 @@ function returnToOrders() {
         props.section === 'entregas' ? '' : 'mt-6',
         (props.section === 'pedidos' && props.orderPage === 'list') || props.section === 'entregas' || props.section === 'atendimento' ? 'operation-fill-main' : ''
       ]">
-      <TodayPage v-if="props.section === 'hoje'" :api-request="props.apiRequest" />
+      <TodayPage v-if="props.section === 'hoje'" :api-request="props.apiRequest" @synchronization="todaySyncStatus = $event" />
       <AttendancePage v-else-if="props.section === 'atendimento'" :quota-usage="attendanceQuota" :api-request="props.apiRequest" @quota="attendanceQuota = $event" />
       <OrderListPage v-else-if="props.section === 'pedidos' && props.orderPage === 'list'" :api-request="props.apiRequest" />
       <NewOrderPage
