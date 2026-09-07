@@ -4,6 +4,7 @@ node_modules/
 # Build output and module federation types
 dist/
 @mf-types/
+.mf/
 *.tsbuildinfo
 
 # Local environment files

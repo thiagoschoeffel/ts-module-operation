@@ -20,7 +20,6 @@ import {
   TriangleAlertIcon,
   type TabItem
 } from '@thiagoschoeffel/ts-components'
-import type { OrderItem } from '../components/new-order/types'
 import PackingLabelPreviews from '../components/packing/PackingLabelPreviews.vue'
 import { createPackingLabelBundle, fullPackingLabelSelection } from '../domain/packingLabels'
 import {
@@ -39,12 +38,22 @@ import type { PackingLabelBundle, PackingLabelPrintSelection } from '../types/pa
 
 type PackingTab = 'awaiting' | 'packed'
 type Feedback = { variant: 'success' | 'danger', title: string, description: string }
+type PackingViewItem = {
+  id: string
+  name: string
+  details: string[]
+  customizations: string[]
+  additions: string[]
+  fulfillmentSource: 'daily-production' | 'frozen-stock'
+  frozenStock?: { producibleName: string, presentation: string }
+  hasRestrictionConflict: boolean
+}
 type PackingViewOrder = {
   id: string
   api: ApiPackingOrder
   customer: { name: string, phone: string, channel: 'WhatsApp' | 'Telefone' | 'Balcão', restriction?: string }
   deliveryWindow?: string
-  items: OrderItem[]
+  items: PackingViewItem[]
   packedAt?: string
   packedBy?: string
   packingLabels?: PackingLabelBundle
@@ -65,6 +74,7 @@ const snapshot = ref({ awaiting: [] as PackingViewOrder[], packed: [] as Packing
 const activeTab = ref<PackingTab>(requestedTab === 'packed' ? 'packed' : 'awaiting')
 const search = ref('')
 const feedback = ref<Feedback>()
+const isLoading = ref(true)
 const hasError = ref(false)
 const loadError = ref('')
 const printingOrderId = ref<string>()
@@ -125,23 +135,14 @@ function toViewOrder(order: ApiPackingOrder): PackingViewOrder {
     deliveryWindow: order.deliveryWindow,
     items: order.items.flatMap(item => Array.from({ length: item.quantity }, (_, unit) => ({
       id: `${item.id}-${unit + 1}`,
-      offerId: item.id,
       name: item.name,
-      price: 0,
       details: item.detailLines,
+      customizations: item.attentionLines,
       additions: [],
       fulfillmentSource: item.isFrozen ? 'frozen-stock' : 'daily-production',
-      frozenStock: item.isFrozen ? {
-        configurationId: item.id,
-        producibleItemId: item.id,
-        producibleName: item.name,
-        presentation: item.presentation ?? '',
-        unitPrice: 0,
-        allocationStatus: 'allocated',
-        allocations: []
-      } : undefined,
-      effectiveComponents: [],
-      customizations: item.attentionLines,
+      frozenStock: item.isFrozen
+        ? { producibleName: item.name, presentation: item.presentation ?? '' }
+        : undefined,
       hasRestrictionConflict: false
     }))),
     packedAt: order.packedAt ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(order.packedAt)) : undefined,
@@ -154,6 +155,7 @@ async function refresh() {
   if (!props.apiRequest) {
     hasError.value = true
     loadError.value = 'A sessão autenticada da API não está disponível.'
+    isLoading.value = false
     return
   }
   try {
@@ -172,6 +174,9 @@ async function refresh() {
     hasError.value = true
     loadError.value = error instanceof Error ? error.message : 'Não foi possível carregar a fila de embalagem.'
   }
+  finally {
+    isLoading.value = false
+  }
 }
 
 function updateTab(value: string) {
@@ -182,16 +187,6 @@ function updateTab(value: string) {
   else
     url.searchParams.delete('tab')
   window.history.replaceState(window.history.state, '', url)
-}
-
-function itemName(item: OrderItem) {
-  return item.fulfillmentSource === 'frozen-stock' && item.frozenStock
-    ? item.frozenStock.producibleName
-    : item.name
-}
-
-function itemPresentation(item: OrderItem) {
-  return item.fulfillmentSource === 'frozen-stock' ? item.frozenStock?.presentation : undefined
 }
 
 async function runPrint(bundle: PackingLabelBundle, selection: PackingLabelPrintSelection) {
@@ -269,7 +264,7 @@ async function finishPacking() {
     printingOrderId.value = undefined
     packingDialogOpen.value = false
     pendingPacking.value = undefined
-    refresh()
+    void refresh()
   }
 }
 
@@ -293,23 +288,34 @@ async function reprintLabels() {
   const order = reprintOrder.value
   const bundle = reprintBundle.value
   if (!order || !bundle || !canReprint.value) return
+  if (!props.apiRequest) {
+    reprintError.value = 'A sessão autenticada da API não está disponível.'
+    reprintState.value = 'error'
+    return
+  }
 
   reprintState.value = 'printing'
   reprintError.value = ''
   try {
     await runPrint(bundle, reprintSelection.value)
-    if (!props.apiRequest) throw new Error('A sessão autenticada da API não está disponível.')
-    await recordLabelPrint(props.apiRequest, order.id, reprintSelection.value, 'Succeeded')
-    reprintState.value = 'success'
-    refresh()
   }
   catch (error) {
     reprintError.value = error instanceof Error ? error.message : 'Não foi possível imprimir as etiquetas.'
-    if (props.apiRequest)
-      await recordLabelPrint(props.apiRequest, order.id, reprintSelection.value, 'Failed', reprintError.value).catch(() => undefined)
+    await recordLabelPrint(props.apiRequest, order.id, reprintSelection.value, 'Failed', reprintError.value).catch(() => undefined)
     reprintState.value = 'error'
-    refresh()
+    void refresh()
+    return
   }
+
+  try {
+    await recordLabelPrint(props.apiRequest, order.id, reprintSelection.value, 'Succeeded')
+    reprintState.value = 'success'
+  }
+  catch (error) {
+    reprintError.value = `As etiquetas foram impressas, mas o registro da tentativa falhou: ${error instanceof Error ? error.message : 'erro desconhecido'}. Não reimprima sem conferir as etiquetas físicas.`
+    reprintState.value = 'error'
+  }
+  void refresh()
 }
 
 function retry() {
@@ -381,8 +387,18 @@ onMounted(() => { void refresh() })
       </Tabs>
     </Card>
 
+    <div v-if="isLoading" class="mt-4 grid gap-4 sm:grid-cols-2" aria-busy="true" aria-label="Carregando fila de embalagem">
+      <Card v-for="index in 2" :key="index">
+        <div class="animate-pulse space-y-3" aria-hidden="true">
+          <div class="h-4 w-2/5 rounded bg-slate-100" />
+          <div class="h-3 w-3/5 rounded bg-slate-100" />
+          <div class="h-16 rounded bg-slate-50" />
+        </div>
+      </Card>
+    </div>
+
     <EmptyState
-      v-if="hasError"
+      v-else-if="hasError"
       class="mt-4 bg-white"
       title="Não foi possível carregar a fila"
       :description="loadError || 'Tente novamente para consultar os pedidos em embalagem.'">
@@ -450,23 +466,17 @@ onMounted(() => { void refresh() })
                 </span>
                 <div class="min-w-0 flex-1">
                   <div class="flex flex-wrap items-center gap-1.5">
-                    <p class="font-semibold text-slate-800">{{ index + 1 }}. {{ itemName(item) }}</p>
+                    <p class="font-semibold text-slate-800">{{ index + 1 }}. {{ item.name }}</p>
                     <Badge v-if="item.fulfillmentSource === 'frozen-stock'" variant="info">
                       <SnowflakeIcon class="mr-1 size-3" aria-hidden="true" />Congelado · já etiquetado
                     </Badge>
                     <Badge v-else variant="neutral">Etiqueta ao embalar</Badge>
                   </div>
-                  <p v-if="itemPresentation(item)" class="mt-1 text-xs font-medium text-slate-600">{{ itemPresentation(item) }}</p>
+                  <p v-if="item.frozenStock?.presentation" class="mt-1 text-xs font-medium text-slate-600">{{ item.frozenStock.presentation }}</p>
                   <div v-for="detail in item.details" :key="detail" class="space-y-1 text-xs leading-5 text-slate-500 [&_a]:text-blue-600 [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-slate-300 [&_blockquote]:pl-2 [&_em]:italic [&_h2]:text-sm [&_h2]:font-semibold [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-4 [&_s]:line-through [&_strong]:font-semibold [&_u]:underline [&_ul]:list-disc [&_ul]:pl-4" v-html="sanitizeRichText(detail)" />
-                  <p v-if="item.fulfillmentSource === 'frozen-stock' && item.frozenStock?.allocations.length" class="mt-1 text-xs text-slate-500">
-                    {{ item.frozenStock.allocations.map(allocation => `${allocation.lotId} · validade ${allocation.expiresOn.split('-').reverse().join('/')}`).join(', ') }}
-                  </p>
-                  <div v-if="item.customizations.length || item.additions.length" class="mt-2 flex flex-wrap gap-1.5">
-                    <Badge v-for="customization in item.customizations" :key="customization" variant="warning">
-                      {{ customization }}
-                    </Badge>
-                    <Badge v-for="addition in item.additions" :key="addition" variant="info">
-                      {{ addition }}
+                  <div v-if="item.customizations.length" class="mt-2 flex flex-wrap gap-1.5">
+                    <Badge v-for="attention in item.customizations" :key="attention" variant="warning">
+                      {{ attention }}
                     </Badge>
                   </div>
                 </div>

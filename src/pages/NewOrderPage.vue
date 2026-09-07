@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { Alert, Badge, Button, Card, EmptyState, Input, Select, TriangleAlertIcon } from '@thiagoschoeffel/ts-components'
-import { getDailyCapacity, getOrder, getOrderAuthoringContext, saveOrder, type ApiDailyCapacity, type ApiOrderAuthoringContext, type AuthenticatedApiRequest, type OrderItemInput } from '../services/ordersApi'
+import { getDailyCapacity, getOrder, getOrderAuthoringContext, saveOrder, type ApiDailyCapacity, type ApiOrderAuthoringContext, type ApiOrderFulfillmentType, type AuthenticatedApiRequest, type OrderItemInput } from '../services/ordersApi'
 import { navigate } from '../utils/navigation'
 
 const props = withDefaults(defineProps<{ mode?: 'create' | 'edit', orderId?: string, apiRequest?: AuthenticatedApiRequest }>(), { mode: 'create' })
 const today = new Date().toLocaleDateString('en-CA')
 const customerId = ref('')
+const fulfillmentType = ref<ApiOrderFulfillmentType>('Delivery')
+const contactPhone = ref('')
+const addressId = ref('')
+const deliveryWindow = ref('11:00–12:00')
 const operationalDate = ref(today)
 const items = ref<OrderItemInput[]>([])
 const version = ref(0)
@@ -26,6 +30,12 @@ const saveIdempotencyKey = ref(crypto.randomUUID())
 
 const customerSelectOptions = computed(() => context.value?.customers.map(customer => ({ value: customer.id, label: customer.name, description: customer.phone })) ?? [])
 const customerName = computed(() => customerSelectOptions.value.find(option => option.value === customerId.value)?.label)
+const selectedCustomer = computed(() => context.value?.customers.find(customer => customer.id === customerId.value))
+const addressOptions = computed(() => selectedCustomer.value?.addresses.map(address => ({
+  value: address.id,
+  label: address.label,
+  description: [address.street, address.number, address.neighborhood, address.city].filter(Boolean).join(', ')
+})) ?? [])
 const offerOptions = computed(() => context.value?.offers.map(offer => ({ value: offer.id, label: offer.name, description: offer.fulfillmentMode === 'FrozenStock' ? 'Atendido por estoque congelado' : 'Produção diária' })) ?? [])
 const producibleOptions = computed(() => context.value?.menuOptions.filter(item => item.availability === 'Available')
   .map(item => ({ value: item.producibleItemId, label: `${item.category} · ${item.producibleItemName}` })) ?? [])
@@ -38,7 +48,10 @@ const requestedDailyUnits = computed(() => items.value.reduce((total, item) => {
   return total + (offer?.fulfillmentMode === 'DailyProduction' ? item.quantity : 0)
 }, 0))
 const projectedAvailable = computed(() => capacity.value ? capacity.value.availableUnits - requestedDailyUnits.value : undefined)
-const canSave = computed(() => customerId.value && operationalDate.value && items.value.length && !saving.value)
+const canSave = computed(() => customerId.value && operationalDate.value && items.value.length
+  && contactPhone.value.replace(/\D/g, '').length >= 10
+  && (fulfillmentType.value === 'Pickup' || Boolean(addressId.value && deliveryWindow.value.trim()))
+  && !saving.value)
 
 watch(operationalDate, loadContext)
 watch(selectedOfferId, () => {
@@ -46,7 +59,11 @@ watch(selectedOfferId, () => {
   selectedFrozenConfigurationId.value = ''
   unitPrice.value = selectedOffer.value?.effectivePrice ?? 0
 })
-watch([customerId, operationalDate, items], () => { saveIdempotencyKey.value = crypto.randomUUID() }, { deep: true })
+watch(customerId, () => {
+  contactPhone.value = selectedCustomer.value?.phone ?? ''
+  addressId.value = selectedCustomer.value?.addresses[0]?.id ?? ''
+})
+watch([customerId, operationalDate, items, fulfillmentType, contactPhone, addressId, deliveryWindow], () => { saveIdempotencyKey.value = crypto.randomUUID() }, { deep: true })
 
 async function loadContext() {
   if (!props.apiRequest || !operationalDate.value) return
@@ -105,7 +122,21 @@ async function submit() {
   saving.value = true
   error.value = ''
   try {
-    const saved = await saveOrder(props.apiRequest, { id: props.mode === 'edit' ? props.orderId : undefined, customerId: customerId.value, customerName: customerName.value, operationalDate: operationalDate.value, expectedVersion: version.value, items: items.value, idempotencyKey: saveIdempotencyKey.value })
+    const saved = await saveOrder(props.apiRequest, {
+      id: props.mode === 'edit' ? props.orderId : undefined,
+      customerId: customerId.value,
+      customerName: customerName.value,
+      operationalDate: operationalDate.value,
+      expectedVersion: version.value,
+      items: items.value,
+      fulfillment: {
+        type: fulfillmentType.value,
+        phone: contactPhone.value,
+        addressId: fulfillmentType.value === 'Delivery' ? addressId.value : undefined,
+        deliveryWindow: fulfillmentType.value === 'Delivery' ? deliveryWindow.value.trim() : undefined
+      },
+      idempotencyKey: saveIdempotencyKey.value
+    })
     success.value = props.mode === 'edit' ? 'Alterações salvas na API.' : 'Pedido criado como aberto na API.'
     setTimeout(() => navigate(`/operacoes/pedidos/${saved.id}?retorno=${encodeURIComponent(returnUrl())}`), 500)
   }
@@ -129,8 +160,14 @@ onMounted(async () => {
       operationalDate.value = order.operationalDate
       version.value = order.version
       items.value = order.items.map(item => ({ offerId: item.offerId, quantity: item.quantity, unitPrice: item.fulfillmentMode === 'DailyProduction' ? item.unitPrice : undefined, frozenConfigurationId: item.frozenConfigurationId, producibleItemId: item.fulfillmentMode === 'DailyProduction' ? item.producibleItemId : undefined }))
+      await loadContext()
+      fulfillmentType.value = order.fulfillment.type ?? 'Delivery'
+      contactPhone.value = order.fulfillment.phone ?? selectedCustomer.value?.phone ?? ''
+      deliveryWindow.value = order.fulfillment.deliveryWindow ?? '11:00–12:00'
+      addressId.value = selectedCustomer.value?.addresses.find(address => address.street === order.fulfillment.street
+        && address.number === order.fulfillment.number)?.id ?? selectedCustomer.value?.addresses[0]?.id ?? ''
     }
-    await loadContext()
+    else await loadContext()
   }
   catch (cause) { error.value = cause instanceof Error ? cause.message : 'Não foi possível carregar o pedido.' }
   finally { loading.value = false }
@@ -150,6 +187,17 @@ onMounted(async () => {
           <Input v-model="operationalDate" type="date" label="Data operacional" required />
         </div>
         <p class="mt-3 text-xs text-slate-500">A seleção usa somente clientes ativos do diretório autoritativo.</p>
+      </Card>
+
+      <Card>
+        <template #header><h2 class="text-xs font-semibold uppercase tracking-wide text-slate-500">Entrega ou retirada</h2><p class="mt-1 text-sm text-slate-500">Esses dados serão preservados historicamente quando o pedido for confirmado.</p></template>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <Select v-model="fulfillmentType" label="Modalidade" :options="[{ value: 'Delivery', label: 'Entrega' }, { value: 'Pickup', label: 'Retirada' }]" required />
+          <Input v-model="contactPhone" type="tel" label="Telefone de contato" required />
+          <Select v-if="fulfillmentType === 'Delivery'" v-model="addressId" label="Endereço" :options="addressOptions" required />
+          <Input v-if="fulfillmentType === 'Delivery'" v-model="deliveryWindow" label="Janela de entrega" placeholder="Ex.: 11:00–12:00" required />
+        </div>
+        <Alert v-if="fulfillmentType === 'Delivery' && customerId && !addressOptions.length" class="mt-3" variants="warning" description="Cadastre um endereço para o cliente antes de criar um pedido de entrega." />
       </Card>
 
       <Card>

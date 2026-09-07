@@ -111,6 +111,15 @@ onMounted(load)
             <dl class="grid gap-4 text-sm sm:grid-cols-3"><div><dt class="text-slate-400">Cliente</dt><dd class="mt-1 font-medium text-slate-800">{{ order.customerId }}</dd></div><div><dt class="text-slate-400">Data operacional</dt><dd class="mt-1 font-medium text-slate-800">{{ formatDate(order.operationalDate) }}</dd></div><div><dt class="text-slate-400">Versão</dt><dd class="mt-1 font-medium text-slate-800">{{ order.version }}</dd></div></dl>
           </Card>
           <Card>
+            <template #header><h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500">{{ order.fulfillment.type === 'Pickup' ? 'Retirada' : 'Entrega' }}</h3></template>
+            <Alert v-if="!order.fulfillment.isComplete" variants="warning" title="Snapshot histórico incompleto" description="Este pedido é legado e precisa de revisão antes de entrar na logística." />
+            <dl v-else class="grid gap-4 text-sm sm:grid-cols-2">
+              <div><dt class="text-slate-400">Contato</dt><dd class="mt-1 font-medium text-slate-800">{{ order.fulfillment.contactName }} · {{ order.fulfillment.phone }}</dd></div>
+              <div v-if="order.fulfillment.type === 'Delivery'"><dt class="text-slate-400">Janela</dt><dd class="mt-1 font-medium text-slate-800">{{ order.fulfillment.deliveryWindow }}</dd></div>
+              <div v-if="order.fulfillment.type === 'Delivery'" class="sm:col-span-2"><dt class="text-slate-400">Endereço histórico</dt><dd class="mt-1 font-medium text-slate-800">{{ [order.fulfillment.street, order.fulfillment.number, order.fulfillment.complement, order.fulfillment.neighborhood, order.fulfillment.city, order.fulfillment.state, order.fulfillment.postalCode].filter(Boolean).join(', ') }}</dd><p v-if="order.fulfillment.reference" class="mt-1 text-slate-500">Referência: {{ order.fulfillment.reference }}</p></div>
+            </dl>
+          </Card>
+          <Card>
             <template #header><h3 class="text-xs font-semibold uppercase tracking-wide text-slate-500">Itens</h3></template>
             <div class="space-y-3"><article v-for="item in order.items" :key="item.id" class="rounded-lg border border-slate-200 p-4"><div class="flex justify-between gap-4"><div><p class="font-medium text-slate-800">{{ item.offerName }} <Badge v-if="item.fulfillmentMode === 'FrozenStock'" variant="info">Congelado</Badge></p><p class="mt-1 text-sm text-slate-500">{{ item.producibleItemName }}<template v-if="item.frozenPresentation"> · {{ item.frozenPresentation }}</template></p><p class="mt-1 text-sm text-slate-500">{{ item.quantity }} × {{ formatCurrency(item.unitPrice) }}</p></div><p class="font-semibold text-slate-900">{{ formatCurrency(item.total) }}</p></div></article></div>
           </Card>

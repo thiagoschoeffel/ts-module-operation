@@ -90,7 +90,7 @@ function returnToOrders() {
       <button
         v-if="props.section === 'pedidos' && props.orderPage !== 'list'"
         type="button"
-        class="hidden cursor-pointer items-center gap-1 text-sm font-medium text-slate-400 transition-colors hover:text-slate-800 sm:inline-flex"
+        class="inline-flex cursor-pointer items-center gap-1 text-sm font-medium text-slate-400 transition-colors hover:text-slate-800"
         @click="returnToOrders">
         <ChevronLeftIcon class="size-4" aria-hidden="true" />
         Voltar para pedidos
