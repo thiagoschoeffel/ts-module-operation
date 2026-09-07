@@ -77,6 +77,7 @@ const tabs: TabItem[] = [
 ]
 
 const selectedConversation = computed(() => conversations.value.find(item => item.id === selectedId.value))
+const requiresAttention = (message: AttendanceMessage) => ['failed', 'outcome-unknown'].includes(message.processingStatus)
 const filteredConversations = computed(() => {
   const query = search.value.trim().toLocaleLowerCase('pt-BR')
   return conversations.value.filter(conversation => {
@@ -85,7 +86,7 @@ const filteredConversations = computed(() => {
       : activeFilter.value === 'human'
         ? conversation.mode === 'human'
         : activeFilter.value === 'failed'
-          ? conversation.messages.some(message => message.processingStatus === 'failed')
+          ? conversation.messages.some(requiresAttention)
           : conversation.mode === 'closed'
     const matchesSearch = !query
       || conversation.customerName.toLocaleLowerCase('pt-BR').includes(query)
@@ -113,14 +114,14 @@ function modeVariant(mode: AttendanceMode) {
 }
 
 function processingLabel(status: AttendanceMessage['processingStatus']) {
-  const labels = { received: 'Recebida', processing: 'Processando', processed: 'Processada', failed: 'Falhou', ignored: 'Ignorada' }
+  const labels = { received: 'Recebida', processing: 'Processando', processed: 'Processada', failed: 'Falhou', ignored: 'Ignorada', 'outcome-unknown': 'Resultado incerto' }
   return labels[status]
 }
 
 function processingVariant(status: AttendanceMessage['processingStatus']) {
   if (status === 'processed') return 'success'
   if (status === 'failed') return 'danger'
-  if (status === 'processing' || status === 'received') return 'warning'
+  if (status === 'processing' || status === 'received' || status === 'outcome-unknown') return 'warning'
   return 'neutral'
 }
 
@@ -137,7 +138,7 @@ function conversationInitials(name: string) {
 function tabCount(value: string) {
   if (value === 'open') return conversations.value.filter(item => item.mode !== 'closed').length
   if (value === 'human') return conversations.value.filter(item => item.mode === 'human').length
-  if (value === 'failed') return conversations.value.filter(item => item.messages.some(message => message.processingStatus === 'failed')).length
+  if (value === 'failed') return conversations.value.filter(item => item.messages.some(requiresAttention)).length
   return conversations.value.filter(item => item.mode === 'closed').length
 }
 
@@ -414,7 +415,7 @@ onBeforeUnmount(() => { if (feedbackTimeout) clearTimeout(feedbackTimeout) })
                           aria-hidden="true" />
                         <InboxIcon v-else-if="message.processingStatus === 'received'" class="size-3"
                           aria-hidden="true" />
-                        <CircleAlertIcon v-else-if="message.processingStatus === 'failed'" class="size-3"
+                        <CircleAlertIcon v-else-if="message.processingStatus === 'failed' || message.processingStatus === 'outcome-unknown'" class="size-3"
                           aria-hidden="true" />
                         <MinusIcon v-else class="size-3" aria-hidden="true" />
                         {{ processingLabel(message.processingStatus) }}

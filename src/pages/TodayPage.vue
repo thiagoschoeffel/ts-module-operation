@@ -8,10 +8,23 @@ import type { AuthenticatedApiRequest } from '../services/ordersApi'
 import { loadTodaySnapshot, type TodaySnapshot } from '../services/todayApi'
 
 const props = defineProps<{ apiRequest?: AuthenticatedApiRequest }>()
+const emit = defineEmits<{ synchronization: [status: 'synced' | 'syncing' | 'partial' | 'error'] }>()
 const snapshot = ref<TodaySnapshot>()
 
 onMounted(async () => {
-  if (props.apiRequest) snapshot.value = await loadTodaySnapshot(props.apiRequest)
+  emit('synchronization', 'syncing')
+  if (!props.apiRequest) {
+    emit('synchronization', 'error')
+    return
+  }
+  try {
+    snapshot.value = await loadTodaySnapshot(props.apiRequest)
+    const failures = snapshot.value.synchronization.failedSources.length
+    emit('synchronization', failures === 0 ? 'synced' : failures === 6 ? 'error' : 'partial')
+  }
+  catch {
+    emit('synchronization', 'error')
+  }
 })
 </script>
 

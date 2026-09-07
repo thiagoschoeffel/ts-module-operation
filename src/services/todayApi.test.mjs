@@ -22,6 +22,7 @@ test('carrega o painel Hoje somente por endpoints autoritativos', async () => {
   const snapshot = await loadTodaySnapshot(request, '2026-09-07')
 
   assert.equal(snapshot.menu?.status, 'Published')
+  assert.deepEqual(snapshot.synchronization.failedSources, [])
   assert.deepEqual(paths, [
     '/api/orders',
     '/api/daily-capacities/2026-09-07',
@@ -40,4 +41,18 @@ test('não cria cardápio fallback quando a API não possui registro para o dia'
   const snapshot = await loadTodaySnapshot(request, '2026-09-07')
 
   assert.equal(snapshot.menu, undefined)
+  assert.deepEqual(snapshot.synchronization.failedSources, [])
+})
+
+test('identifica atualização parcial quando uma fonte autoritativa falha', async () => {
+  const request = async (path) => {
+    if (path === '/api/logistics') throw new Error('API indisponível')
+    if (path === '/api/orders') return response([])
+    if (path.startsWith('/api/menus/')) return response({}, 404)
+    return response({})
+  }
+
+  const snapshot = await loadTodaySnapshot(request, '2026-09-07')
+
+  assert.deepEqual(snapshot.synchronization.failedSources, ['entregas'])
 })

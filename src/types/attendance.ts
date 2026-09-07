@@ -1,7 +1,7 @@
 export type AttendanceMode = 'automated' | 'human' | 'closed'
 export type MessageDirection = 'inbound' | 'outbound'
 export type MessageOrigin = 'customer' | 'automation' | 'operator'
-export type MessageProcessingStatus = 'received' | 'processing' | 'processed' | 'failed' | 'ignored'
+export type MessageProcessingStatus = 'received' | 'processing' | 'processed' | 'failed' | 'ignored' | 'outcome-unknown'
 export type WhatsAppQuotaStatus = 'normal' | 'attention' | 'alert' | 'critical' | 'automation-blocked'
 
 export interface AttendanceMessage {
