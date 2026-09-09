@@ -149,7 +149,8 @@ export const paymentMethodOptions = [
   { value: 'pix', label: 'Pix' },
   { value: 'cash', label: 'Dinheiro' },
   { value: 'credit-card', label: 'Cartão de crédito' },
-  { value: 'debit-card', label: 'Cartão de débito' }
+  { value: 'debit-card', label: 'Cartão de débito' },
+  { value: 'bank-transfer', label: 'Transferência bancária' }
 ]
 
 export function formatCurrency(value: number) {

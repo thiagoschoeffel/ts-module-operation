@@ -12,7 +12,7 @@ export interface CustomerAddress {
 }
 
 export type PaymentCondition = 'cash' | 'on-delivery' | 'deferred'
-export type PaymentMethod = 'pix' | 'cash' | 'credit-card' | 'debit-card'
+export type PaymentMethod = 'pix' | 'cash' | 'credit-card' | 'debit-card' | 'bank-transfer'
 
 export interface PlanAcquisition {
   id: string

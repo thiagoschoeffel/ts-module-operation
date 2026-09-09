@@ -14,7 +14,7 @@ const emit = defineEmits<{ 'update:modelValue': [items: OrderItemInput[]] }>()
 const drawerOpen = ref(false)
 const drawerView = ref<'offers' | 'configuration'>('offers')
 const selectedOfferId = ref('')
-const selectedProducibleId = ref('')
+const selectedMenuOptionId = ref('')
 const selectedFrozenConfigurationId = ref('')
 const quantity = ref(1)
 const editingIndex = ref<number>()
@@ -26,7 +26,7 @@ const offers = computed(() => props.context?.offers ?? [])
 const selectedOffer = computed(() => offers.value.find(offer => offer.id === selectedOfferId.value))
 const menuOptions = computed(() => props.context?.menuOptions.filter(option => option.availability === 'Available') ?? [])
 const producibleOptions = computed(() => menuOptions.value.map(option => ({
-  value: option.producibleItemId,
+  value: option.id,
   label: option.category,
   description: option.producibleItemName
 })))
@@ -56,7 +56,9 @@ function itemPresentation(item: OrderItemInput) {
 function configureOffer(offerId: string, index?: number) {
   const item = index === undefined ? undefined : props.modelValue[index]
   selectedOfferId.value = offerId
-  selectedProducibleId.value = item?.producibleItemId ?? menuOptions.value[0]?.producibleItemId ?? ''
+  selectedMenuOptionId.value = menuOptions.value.find(option => option.producibleItemId === item?.producibleItemId)?.id
+    ?? menuOptions.value[0]?.id
+    ?? ''
   selectedFrozenConfigurationId.value = item?.frozenConfigurationId
     ?? props.context?.frozenConfigurations.find(configuration => configuration.offerId === offerId && configuration.availableQuantity > 0)?.id
     ?? ''
@@ -64,6 +66,7 @@ function configureOffer(offerId: string, index?: number) {
   editingIndex.value = index
   itemError.value = ''
   drawerView.value = 'configuration'
+  drawerOpen.value = true
 }
 
 function saveItem() {
@@ -74,11 +77,12 @@ function saveItem() {
   }
   let item: OrderItemInput
   if (offer.fulfillmentMode === 'DailyProduction') {
-    if (!selectedProducibleId.value || offer.effectivePrice === undefined) {
+    const menuOption = menuOptions.value.find(option => option.id === selectedMenuOptionId.value)
+    if (!menuOption || offer.effectivePrice === undefined) {
       itemError.value = 'Selecione uma opção disponível do cardápio publicado.'
       return
     }
-    item = { offerId: offer.id, producibleItemId: selectedProducibleId.value, unitPrice: offer.effectivePrice, quantity: quantity.value }
+    item = { offerId: offer.id, producibleItemId: menuOption.producibleItemId, unitPrice: offer.effectivePrice, quantity: quantity.value }
   }
   else {
     const configuration = frozenConfigurations.value.find(current => current.id === selectedFrozenConfigurationId.value)
@@ -165,7 +169,7 @@ function handleDrawerOpen(open: boolean) {
         <div v-else class="space-y-5">
           <button type="button" class="inline-flex cursor-pointer items-center gap-1 text-sm font-medium text-slate-400 hover:text-slate-800" @click="drawerView = 'offers'"><ChevronLeftIcon class="size-4" /> Voltar para ofertas</button>
           <Alert v-if="selectedOffer?.fulfillmentMode === 'FrozenStock'" variants="info" title="Alocação na confirmação" description="O saldo será conferido novamente e os lotes serão alocados somente ao confirmar o pedido."><template #icon><InfoIcon /></template></Alert>
-          <RadioGroup v-if="selectedOffer?.fulfillmentMode === 'DailyProduction'" v-model="selectedProducibleId" :options="producibleOptions" label="Opção do cardápio" name="order-menu-option" />
+          <RadioGroup v-if="selectedOffer?.fulfillmentMode === 'DailyProduction'" v-model="selectedMenuOptionId" :options="producibleOptions" label="Opção do cardápio" name="order-menu-option" />
           <RadioGroup v-else v-model="selectedFrozenConfigurationId" :options="frozenOptions" label="Preparação congelada" name="order-frozen-configuration" />
           <Input v-model="quantity" type="number" min="1" step="1" label="Quantidade" required />
           <Alert v-if="itemError" variants="danger" :description="itemError"><template #icon><TriangleAlertIcon /></template></Alert>

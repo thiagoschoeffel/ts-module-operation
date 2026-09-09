@@ -9,6 +9,7 @@ const props = withDefaults(defineProps<{
   paymentCondition: PaymentCondition
   paymentMethod: PaymentMethod
   paymentDueDate?: DateValue
+  minimumDueDate?: DateValue
   deliveryFee: number
   discount: number
   discountLimit: number
@@ -22,6 +23,7 @@ const props = withDefaults(defineProps<{
   showValidation?: boolean
 }>(), {
   enabled: false,
+  minimumDueDate: undefined,
   compatiblePlanName: undefined,
   showValidation: false
 })
@@ -71,6 +73,7 @@ function normalizeAmount(value: string | number) {
         <DatePicker
           v-if="props.paymentCondition === 'deferred'"
           :model-value="props.paymentDueDate"
+          :min-value="props.minimumDueDate"
           label="Vencimento"
           description="Data prevista da cobrança, não do pagamento recebido."
           :error="props.showValidation && !props.paymentDueDate ? 'Informe o vencimento.' : undefined"

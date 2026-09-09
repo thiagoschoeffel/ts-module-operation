@@ -4,6 +4,7 @@ import { ArrowRightIcon, Card, Progress, TriangleAlertIcon } from '@thiagoschoef
 import type { TodaySnapshot } from '../../services/todayApi'
 
 const props = defineProps<{ snapshot?: TodaySnapshot }>()
+const emit = defineEmits<{ configureCapacity: [] }>()
 const todayRoutes = computed(() => props.snapshot?.logistics?.routes
   .filter(route => route.date === props.snapshot?.operationalDate) ?? [])
 
@@ -21,7 +22,8 @@ interface SummaryCard {
   }
   action: {
     label: string
-    href: string
+    href?: string
+    configureCapacity?: boolean
   }
 }
 
@@ -37,15 +39,15 @@ const summaries = computed<SummaryCard[]>(() => [
     label: 'Capacidade',
     primary: props.snapshot?.capacity ? `${props.snapshot.capacity.reservedUnits} / ${props.snapshot.capacity.totalUnits}` : '—',
     secondary: props.snapshot?.capacity ? `${props.snapshot.capacity.availableUnits} restantes` : 'não configurada',
-    footerLabel: 'Ver pedidos',
-    hasAlert: props.snapshot?.capacity?.availableUnits === 0,
+    footerLabel: props.snapshot?.capacity ? 'Ajustar capacidade' : 'Configurar capacidade',
+    hasAlert: Boolean(props.snapshot && !props.snapshot.capacity) || props.snapshot?.capacity?.availableUnits === 0,
     progress: props.snapshot?.capacity ? {
       value: props.snapshot.capacity.reservedUnits,
       max: props.snapshot.capacity.totalUnits,
       label: 'Capacidade utilizada',
       variant: props.snapshot.capacity.availableUnits === 0 ? 'danger' : 'info'
     } : undefined,
-    action: { label: 'Ver pedidos', href: '/operacoes/pedidos' }
+    action: { label: props.snapshot?.capacity ? 'Ajustar capacidade' : 'Configurar capacidade', configureCapacity: true }
   },
   {
     label: 'Embalagem',
@@ -87,7 +89,26 @@ const summaries = computed<SummaryCard[]>(() => [
       </p>
 
       <template #footer>
+        <button
+          v-if="summary.action.configureCapacity"
+          type="button"
+          :aria-label="summary.action.label"
+          :disabled="!props.snapshot"
+          class="-mx-6 -my-4 flex w-[calc(100%+3rem)] cursor-pointer appearance-none items-center justify-between gap-3 border-0 bg-transparent px-6 py-4 text-slate-800 outline-none transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-slate-500/40 disabled:cursor-not-allowed disabled:text-slate-300"
+          @click="emit('configureCapacity')">
+          <span class="flex items-center gap-2 font-medium">
+            <TriangleAlertIcon
+              v-if="summary.hasAlert"
+              :size="16"
+              :stroke-width="1.75"
+              class="shrink-0 text-amber-600"
+              aria-hidden="true" />
+            {{ summary.footerLabel }}
+          </span>
+          <ArrowRightIcon :size="16" :stroke-width="1.75" class="shrink-0" aria-hidden="true" />
+        </button>
         <a
+          v-else
           :href="summary.action.href"
           :aria-label="summary.action.label"
           class="-mx-6 -my-4 flex items-center justify-between gap-3 px-6 py-4 text-slate-800">

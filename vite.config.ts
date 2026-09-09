@@ -5,7 +5,7 @@ import { defineConfig } from 'vite'
 
 const sharedDependencies = {
   vue: { singleton: true, requiredVersion: '^3.5.42', strictVersion: true },
-  '@thiagoschoeffel/ts-components': { version: '0.7.10', singleton: true, requiredVersion: '^0.7.10', strictVersion: true, import: false },
+  '@thiagoschoeffel/ts-components': { version: '0.7.11', singleton: true, requiredVersion: '^0.7.11', strictVersion: true, import: false },
 }
 
 export default defineConfig({

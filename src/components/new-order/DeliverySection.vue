@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Alert, Button, Card, Drawer, EmptyState, HomeIcon, Input, RadioGroup, Select } from '@thiagoschoeffel/ts-components'
+import { Alert, Button, Card, Drawer, EmptyState, HomeIcon, Input, RadioGroup, ScrollArea, Select } from '@thiagoschoeffel/ts-components'
 import { formatAddressLocation, formatAddressStreet } from './address'
 import { deliveryWindowOptions } from './mockData'
-import type { ApiOrderFulfillmentType } from '../../services/ordersApi'
+import type { ApiOrderFulfillmentType, QuickCustomerAddressInput } from '../../services/ordersApi'
 import type { Customer, CustomerAddress } from './types'
+import { formatBrazilianPhone } from './phone'
 
 const props = defineProps<{
   customer?: Customer
@@ -13,6 +14,7 @@ const props = defineProps<{
   fulfillmentType: ApiOrderFulfillmentType
   contactPhone: string
   showValidation?: boolean
+  createAddress?: (input: QuickCustomerAddressInput) => Promise<CustomerAddress>
 }>()
 const emit = defineEmits<{
   'update:address': [address: CustomerAddress | undefined]
@@ -22,6 +24,17 @@ const emit = defineEmits<{
 }>()
 
 const addressDrawerOpen = ref(false)
+const newAddressLabel = ref('')
+const newAddressPostalCode = ref('')
+const newAddressStreet = ref('')
+const newAddressNumber = ref('')
+const newAddressComplement = ref('')
+const newAddressNeighborhood = ref('')
+const newAddressCity = ref('')
+const newAddressState = ref('')
+const newAddressReferencePoint = ref('')
+const creatingAddress = ref(false)
+const createAddressError = ref('')
 const addresses = computed(() => props.customer?.addresses ?? [])
 const phoneIsValid = computed(() => props.contactPhone.replace(/\D/g, '').length >= 10)
 const deliveryIsValid = computed(() => props.fulfillmentType === 'Pickup' || Boolean(props.address && props.deliveryWindow?.trim()))
@@ -29,6 +42,19 @@ const fulfillmentOptions = [
   { value: 'Delivery', label: 'Entrega' },
   { value: 'Pickup', label: 'Retirada' }
 ]
+const stateOptions = [
+  'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG',
+  'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
+].map(state => ({ value: state, label: state }))
+const canAddAddress = computed(() => Boolean(
+  newAddressLabel.value.trim()
+  && newAddressPostalCode.value.replace(/\D/g, '').length === 8
+  && newAddressStreet.value.trim()
+  && newAddressNumber.value.trim()
+  && newAddressNeighborhood.value.trim()
+  && newAddressCity.value.trim()
+  && newAddressState.value
+))
 
 watch(() => props.customer?.id, () => {
   emit('update:address', addresses.value.length === 1 ? addresses.value[0] : undefined)
@@ -50,6 +76,58 @@ function chooseAddressById(addressId: string) {
   const address = addresses.value.find(current => current.id === addressId)
   if (address) chooseAddress(address)
 }
+
+function formatPostalCode(value: string | number) {
+  const digits = String(value).replace(/\D/g, '').slice(0, 8)
+  newAddressPostalCode.value = digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits
+}
+
+function updateContactPhone(value: string | number) {
+  emit('update:contactPhone', formatBrazilianPhone(value))
+}
+
+function resetNewAddress() {
+  newAddressLabel.value = ''
+  newAddressPostalCode.value = ''
+  newAddressStreet.value = ''
+  newAddressNumber.value = ''
+  newAddressComplement.value = ''
+  newAddressNeighborhood.value = ''
+  newAddressCity.value = ''
+  newAddressState.value = ''
+  newAddressReferencePoint.value = ''
+  createAddressError.value = ''
+}
+
+async function submitNewAddress() {
+  if (!props.createAddress || creatingAddress.value || !canAddAddress.value)
+    return
+  creatingAddress.value = true
+  createAddressError.value = ''
+  try {
+    const address = await props.createAddress({
+      label: newAddressLabel.value.trim(),
+      postalCode: newAddressPostalCode.value,
+      street: newAddressStreet.value.trim(),
+      number: newAddressNumber.value.trim(),
+      complement: newAddressComplement.value.trim() || undefined,
+      neighborhood: newAddressNeighborhood.value.trim(),
+      city: newAddressCity.value.trim(),
+      state: newAddressState.value,
+      referencePoint: newAddressReferencePoint.value.trim() || undefined
+    })
+    chooseAddress(address)
+    resetNewAddress()
+  }
+  catch (cause) {
+    createAddressError.value = cause instanceof Error ? cause.message : 'Não foi possível cadastrar o endereço.'
+  }
+  finally {
+    creatingAddress.value = false
+  }
+}
+
+watch(addressDrawerOpen, open => { if (!open && !creatingAddress.value) resetNewAddress() })
 </script>
 
 <template>
@@ -67,7 +145,16 @@ function chooseAddressById(addressId: string) {
     <div v-if="props.customer" class="space-y-5">
       <div class="grid gap-4 sm:grid-cols-2">
         <Select :model-value="props.fulfillmentType" label="Modalidade" :options="fulfillmentOptions" required @update:model-value="emit('update:fulfillmentType', $event as ApiOrderFulfillmentType)" />
-        <Input :model-value="props.contactPhone" type="tel" label="Telefone de contato" required @update:model-value="emit('update:contactPhone', String($event))" />
+        <Input
+          :model-value="formatBrazilianPhone(props.contactPhone)"
+          type="tel"
+          inputmode="tel"
+          autocomplete="tel"
+          label="Telefone de contato"
+          placeholder="(11) 99999-9999"
+          :maxlength="15"
+          required
+          @update:model-value="updateContactPhone" />
       </div>
 
       <div v-if="props.fulfillmentType === 'Delivery'" class="grid gap-5 border-t border-slate-100 pt-5 sm:grid-cols-2">
@@ -81,13 +168,43 @@ function chooseAddressById(addressId: string) {
           </Card>
           <p v-else class="mt-2 text-sm text-slate-500">Nenhum endereço selecionado.</p>
 
-          <Drawer v-if="addresses.length" v-model:open="addressDrawerOpen" side="right" size="large" title="Endereço de entrega" description="Escolha um endereço cadastrado do cliente.">
-            <template #trigger><Button class="mt-3" type="button" variant="secondary" size="small">{{ props.address ? 'Alterar' : 'Escolher endereço' }}</Button></template>
-            <RadioGroup :model-value="selectedAddressId" :options="addressOptions" label="Endereços cadastrados" name="delivery-address" @update:model-value="chooseAddressById" />
+          <Drawer v-model:open="addressDrawerOpen" side="right" size="large" title="Endereço de entrega" description="Escolha um endereço cadastrado ou adicione um novo.">
+            <template #trigger><Button class="mt-3" type="button" variant="secondary" size="small">{{ props.address ? 'Alterar' : addresses.length ? 'Escolher endereço' : 'Adicionar endereço' }}</Button></template>
+            <ScrollArea class="-mr-5 h-full w-[calc(100%+1.25rem)]" scrollbar-visibility="auto">
+              <div class="space-y-5 pr-5">
+                <RadioGroup v-if="addresses.length" :model-value="selectedAddressId" :options="addressOptions" label="Endereços cadastrados" name="delivery-address" @update:model-value="chooseAddressById" />
+                <EmptyState v-else size="small" title="Nenhum endereço cadastrado" description="Preencha os dados abaixo para cadastrar o primeiro endereço deste cliente.">
+                  <template #icon><HomeIcon /></template>
+                </EmptyState>
+
+                <div class="border-t border-slate-200 pt-5">
+                  <p class="mb-3 text-sm font-medium text-slate-700">Novo endereço</p>
+                  <Alert v-if="createAddressError" class="mb-3" variants="danger" size="small" :description="createAddressError" />
+                  <div class="space-y-3">
+                    <Input v-model="newAddressLabel" label="Identificação" placeholder="Ex.: Casa ou Trabalho" autocomplete="off" required />
+                    <Input :model-value="newAddressPostalCode" label="CEP" placeholder="00000-000" autocomplete="postal-code" inputmode="numeric" :maxlength="9" required @update:model-value="formatPostalCode" />
+                    <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7rem]">
+                      <Input v-model="newAddressStreet" label="Logradouro" placeholder="Rua, avenida..." autocomplete="address-line1" required />
+                      <Input v-model="newAddressNumber" label="Número" placeholder="Nº ou s/n" autocomplete="address-line2" required />
+                    </div>
+                    <Input v-model="newAddressComplement" label="Complemento (opcional)" placeholder="Apto., bloco, sala..." autocomplete="address-line3" />
+                    <Input v-model="newAddressNeighborhood" label="Bairro" placeholder="Bairro" required />
+                    <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7rem]">
+                      <Input v-model="newAddressCity" label="Cidade" placeholder="Cidade" autocomplete="address-level2" required />
+                      <Select v-model="newAddressState" label="UF" placeholder="UF" :options="stateOptions" required />
+                    </div>
+                    <Input v-model="newAddressReferencePoint" label="Ponto de referência (opcional)" placeholder="Ex.: próximo à praça" />
+                  </div>
+                </div>
+              </div>
+            </ScrollArea>
+            <template #footer="{ close }">
+              <div class="flex items-center justify-between gap-3">
+                <Button type="button" variant="secondary" :disabled="creatingAddress" @click="close">Cancelar</Button>
+                <Button type="button" :loading="creatingAddress" :disabled="!props.createAddress || !canAddAddress" @click="submitNewAddress">Adicionar e usar</Button>
+              </div>
+            </template>
           </Drawer>
-          <EmptyState v-else class="mt-3" :bordered="false" size="small" title="Nenhum endereço cadastrado" description="Cadastre um endereço no perfil do cliente para usar entrega.">
-            <template #icon><HomeIcon /></template>
-          </EmptyState>
         </div>
 
         <Select :model-value="props.deliveryWindow" label="Janela de entrega" placeholder="Selecione uma janela" :options="deliveryWindowOptions" @update:model-value="emit('update:deliveryWindow', $event)" />

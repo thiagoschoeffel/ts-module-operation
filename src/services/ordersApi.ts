@@ -22,6 +22,15 @@ export interface ApiOrderFulfillment {
   isComplete: boolean
 }
 
+export interface ApiOrderFinancialTerms {
+  paymentCondition: 'cash' | 'on-delivery' | 'deferred'
+  paymentMethod: 'pix' | 'cash' | 'credit-card' | 'debit-card' | 'bank-transfer'
+  paymentDueDate?: string
+  deliveryFee: number
+  discountAmount: number
+  discountReason?: string
+}
+
 export interface ApiOrderItem {
   id: string
   offerId: string
@@ -70,6 +79,7 @@ export interface OrderListQuery {
 export interface ApiOrderDetails extends Omit<ApiOrderSummary, 'itemCount'> {
   items: ApiOrderItem[]
   fulfillment: ApiOrderFulfillment
+  financial: ApiOrderFinancialTerms
   confirmation?: {
     confirmedAt: string
     subtotal: number
@@ -112,6 +122,8 @@ export interface ApiOrderAuthoringContext {
     id: string
     name: string
     phone: string
+    preferredPaymentCondition?: string
+    preferredPaymentMethod?: string
     addresses: Array<{ id: string, label: string, street: string, number?: string, complement?: string, neighborhood?: string, city?: string, state?: string, postalCode?: string, reference?: string }>
   }>
   offers: Array<{ id: string, name: string, fulfillmentMode: ApiFulfillmentMode, effectivePrice?: number, requiresMenuChoice: boolean }>
@@ -135,6 +147,23 @@ export interface OrderItemInput {
   unitPrice?: number
   frozenConfigurationId?: string
   producibleItemId?: string
+}
+
+export interface QuickCustomerInput {
+  name: string
+  phone: string
+}
+
+export interface QuickCustomerAddressInput {
+  label: string
+  postalCode: string
+  street: string
+  number: string
+  complement?: string
+  neighborhood: string
+  city: string
+  state: string
+  referencePoint?: string
 }
 
 export class ApiConflictError extends Error {
@@ -198,11 +227,51 @@ export function getOrderAuthoringContext(request: AuthenticatedApiRequest, opera
   return json<ApiOrderAuthoringContext>(request, `/api/orders/authoring-context?operationalDate=${encodeURIComponent(operationalDate)}`)
 }
 
+export function createCustomerForOrder(request: AuthenticatedApiRequest, input: QuickCustomerInput) {
+  return json<{ id: string }>(request, '/api/orders/customers/quick', {
+    method: 'POST',
+    headers: jsonHeaders,
+    body: JSON.stringify(input)
+  })
+}
+
+export function addCustomerAddressForOrder(request: AuthenticatedApiRequest, customerId: string, input: QuickCustomerAddressInput) {
+  return json<{ id: string }>(request, `/api/orders/customers/${encodeURIComponent(customerId)}/addresses`, {
+    method: 'POST',
+    headers: jsonHeaders,
+    body: JSON.stringify({
+      label: input.label,
+      postalCode: input.postalCode,
+      street: input.street,
+      number: input.number,
+      complement: input.complement,
+      neighborhood: input.neighborhood,
+      city: input.city,
+      state: input.state,
+      referencePoint: input.referencePoint
+    })
+  })
+}
+
 export async function getDailyCapacity(request: AuthenticatedApiRequest, operationalDate: string) {
   const response = await request(`/api/daily-capacities/${encodeURIComponent(operationalDate)}`)
   if (response.status === 404) return undefined
   if (!response.ok) throw await apiError(response)
   return response.json() as Promise<ApiDailyCapacity>
+}
+
+export function configureDailyCapacity(
+  request: AuthenticatedApiRequest,
+  operationalDate: string,
+  totalUnits: number,
+  expectedVersion: number,
+  idempotencyKey = crypto.randomUUID()
+) {
+  return json<ApiDailyCapacity>(request, `/api/daily-capacities/${encodeURIComponent(operationalDate)}`, {
+    method: 'PUT',
+    headers: { ...jsonHeaders, 'Idempotency-Key': idempotencyKey },
+    body: JSON.stringify({ totalUnits, expectedVersion })
+  })
 }
 
 export function saveOrder(request: AuthenticatedApiRequest, input: {
@@ -213,6 +282,7 @@ export function saveOrder(request: AuthenticatedApiRequest, input: {
   expectedVersion?: number
   items: OrderItemInput[]
   fulfillment: { type: ApiOrderFulfillmentType, phone: string, addressId?: string, deliveryWindow?: string }
+  financial: ApiOrderFinancialTerms
   idempotencyKey?: string
 }) {
   const path = input.id ? `/api/orders/${encodeURIComponent(input.id)}` : '/api/orders'
@@ -225,6 +295,7 @@ export function saveOrder(request: AuthenticatedApiRequest, input: {
       operationalDate: input.operationalDate,
       items: input.items,
       fulfillment: input.fulfillment,
+      financial: input.financial,
       ...(input.id ? { expectedVersion: input.expectedVersion } : {})
     })
   })
@@ -234,7 +305,12 @@ export function confirmOrder(request: AuthenticatedApiRequest, order: ApiOrderDe
   return json(request, `/api/orders/${encodeURIComponent(order.id)}/confirmation`, {
     method: 'POST',
     headers: { ...jsonHeaders, 'Idempotency-Key': idempotencyKey ?? crypto.randomUUID() },
-    body: JSON.stringify({ expectedVersion: order.version })
+    body: JSON.stringify({
+      expectedVersion: order.version,
+      discountAmount: order.financial.discountAmount,
+      discountReason: order.financial.discountReason,
+      deliveryFee: order.financial.deliveryFee
+    })
   })
 }
 

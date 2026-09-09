@@ -1,22 +1,36 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
+  Alert,
   Badge,
   Button,
   Card,
   Combobox,
+  Drawer,
   EmptyState,
+  Input,
   SearchIcon,
   TriangleAlertIcon
 } from '@thiagoschoeffel/ts-components'
+import type { QuickCustomerInput } from '../../services/ordersApi'
+import { formatBrazilianPhone } from './phone'
 import type { Customer } from './types'
 
-const props = withDefaults(defineProps<{ modelValue?: Customer, customers?: Customer[] }>(), { customers: () => [] })
+const props = withDefaults(defineProps<{
+  modelValue?: Customer
+  customers?: Customer[]
+  createCustomer?: (input: QuickCustomerInput) => Promise<Customer>
+}>(), { customers: () => [], createCustomer: undefined })
 const emit = defineEmits<{
   'update:modelValue': [customer: Customer | undefined]
 }>()
 
 const search = ref('')
+const newCustomerOpen = ref(false)
+const newCustomerName = ref('')
+const newCustomerPhone = ref('')
+const creatingCustomer = ref(false)
+const createCustomerError = ref('')
 
 const matchingCustomers = computed(() => {
   const query = search.value.trim().toLocaleLowerCase('pt-BR')
@@ -46,6 +60,36 @@ function selectCustomerById(customerId?: string) {
     selectCustomer(customer)
 }
 
+function updateNewCustomerPhone(value: string | number) {
+  newCustomerPhone.value = formatBrazilianPhone(value)
+}
+
+function resetNewCustomer() {
+  newCustomerName.value = ''
+  newCustomerPhone.value = ''
+  createCustomerError.value = ''
+}
+
+async function submitNewCustomer() {
+  if (!props.createCustomer || creatingCustomer.value || !newCustomerName.value.trim() || newCustomerPhone.value.replace(/\D/g, '').length < 10)
+    return
+  creatingCustomer.value = true
+  createCustomerError.value = ''
+  try {
+    const customer = await props.createCustomer({ name: newCustomerName.value.trim(), phone: newCustomerPhone.value })
+    selectCustomer(customer)
+    newCustomerOpen.value = false
+    resetNewCustomer()
+  }
+  catch (cause) {
+    createCustomerError.value = cause instanceof Error ? cause.message : 'Não foi possível cadastrar o cliente.'
+  }
+  finally {
+    creatingCustomer.value = false
+  }
+}
+
+watch(newCustomerOpen, open => { if (!open && !creatingCustomer.value) resetNewCustomer() })
 </script>
 
 <template>
@@ -70,8 +114,49 @@ function selectCustomerById(customerId?: string) {
             :bordered="false"
             size="small"
             title="Nenhum cliente encontrado"
-            description="Revise a busca ou cadastre o cliente na área de Clientes.">
+            description="Revise a busca ou use o cadastro rápido para continuar.">
             <template #icon><SearchIcon /></template>
+            <template #action>
+              <Drawer
+                v-model:open="newCustomerOpen"
+                side="right"
+                size="large"
+                title="Novo cliente"
+                description="Cadastre os dados essenciais para continuar o pedido.">
+                <template #trigger><Button type="button" variant="secondary" size="small">Cadastrar novo cliente</Button></template>
+                <Alert
+                  v-if="createCustomerError"
+                  class="mb-4"
+                  variants="danger"
+                  size="small"
+                  :description="createCustomerError" />
+                <div class="space-y-4">
+                  <Input v-model="newCustomerName" label="Nome" autocomplete="name" required placeholder="Nome do cliente" />
+                  <Input
+                    :model-value="newCustomerPhone"
+                    type="tel"
+                    inputmode="tel"
+                    autocomplete="tel"
+                    label="Telefone"
+                    placeholder="(11) 99999-9999"
+                    :maxlength="15"
+                    required
+                    @update:model-value="updateNewCustomerPhone" />
+                </div>
+                <template #footer="{ close }">
+                  <div class="flex items-center justify-between gap-3">
+                    <Button type="button" variant="secondary" :disabled="creatingCustomer" @click="close">Cancelar</Button>
+                    <Button
+                      type="button"
+                      :loading="creatingCustomer"
+                      :disabled="!props.createCustomer || !newCustomerName.trim() || newCustomerPhone.replace(/\D/g, '').length < 10"
+                      @click="submitNewCustomer">
+                      Adicionar e usar
+                    </Button>
+                  </div>
+                </template>
+              </Drawer>
+            </template>
           </EmptyState>
           <EmptyState
             v-else

@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Alert, AlertDialog, Button, Card, CheckIcon, InfoIcon, Input, TriangleAlertIcon } from '@thiagoschoeffel/ts-components'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { Alert, AlertDialog, Button, Card, CheckIcon, Input, TriangleAlertIcon, type DateValue } from '@thiagoschoeffel/ts-components'
+import { parseDate } from '@internationalized/date'
 import CustomerSection from '../components/new-order/CustomerSection.vue'
 import DeliverySection from '../components/new-order/DeliverySection.vue'
+import FinancialSection from '../components/new-order/FinancialSection.vue'
 import OrderItemsSection from '../components/new-order/OrderItemsSection.vue'
 import OrderSummary from '../components/new-order/OrderSummary.vue'
-import { formatCurrency, getDefaultDeliveryWindow } from '../components/new-order/mockData'
-import type { Customer, CustomerAddress, OrderItem } from '../components/new-order/types'
-import { getDailyCapacity, getOrder, getOrderAuthoringContext, saveOrder, type ApiDailyCapacity, type ApiOrderAuthoringContext, type ApiOrderFulfillmentType, type AuthenticatedApiRequest, type OrderItemInput } from '../services/ordersApi'
+import { formatCurrency, getDefaultDeliveryWindow, paymentConditionOptions, paymentMethodOptions } from '../components/new-order/mockData'
+import type { Customer, CustomerAddress, OrderItem, PaymentCondition, PaymentMethod } from '../components/new-order/types'
+import { addCustomerAddressForOrder, createCustomerForOrder, getDailyCapacity, getOrder, getOrderAuthoringContext, saveOrder, type ApiDailyCapacity, type ApiOrderAuthoringContext, type ApiOrderFulfillmentType, type AuthenticatedApiRequest, type OrderItemInput, type QuickCustomerAddressInput, type QuickCustomerInput } from '../services/ordersApi'
 import { localDateIso } from '../services/todayApi'
 import { navigate } from '../utils/navigation'
 
@@ -19,6 +21,12 @@ const fulfillmentType = ref<ApiOrderFulfillmentType>('Delivery')
 const contactPhone = ref('')
 const deliveryWindow = ref(getDefaultDeliveryWindow())
 const items = ref<OrderItemInput[]>([])
+const paymentCondition = ref<PaymentCondition>('cash')
+const paymentMethod = ref<PaymentMethod>('pix')
+const paymentDueDate = shallowRef<DateValue>()
+const deliveryFee = ref(0)
+const discount = ref(0)
+const discountReason = ref('')
 const version = ref(0)
 const context = ref<ApiOrderAuthoringContext>()
 const capacity = ref<ApiDailyCapacity>()
@@ -34,11 +42,27 @@ let navigationTimeout: ReturnType<typeof setTimeout> | undefined
 let contextSequence = 0
 let initializing = true
 
+function mapPaymentCondition(value?: string): PaymentCondition | undefined {
+  const normalized = value?.trim().toLocaleLowerCase('pt-BR')
+  return ({ 'à vista': 'cash', 'a vista': 'cash', cash: 'cash', 'na entrega': 'on-delivery', 'on-delivery': 'on-delivery',
+    'a prazo': 'deferred', 'à prazo': 'deferred', deferred: 'deferred' } as Record<string, PaymentCondition>)[normalized ?? '']
+}
+
+function mapPaymentMethod(value?: string): PaymentMethod | undefined {
+  const normalized = value?.trim().toLocaleLowerCase('pt-BR')
+  return ({ pix: 'pix', dinheiro: 'cash', cash: 'cash', 'cartão de crédito': 'credit-card', 'cartao de credito': 'credit-card',
+    'credit-card': 'credit-card', 'cartão de débito': 'debit-card', 'cartao de debito': 'debit-card', 'debit-card': 'debit-card',
+    'transferência bancária': 'bank-transfer', 'transferencia bancaria': 'bank-transfer', 'bank-transfer': 'bank-transfer' } as Record<string, PaymentMethod>)[normalized ?? '']
+}
+
 const customers = computed<Customer[]>(() => context.value?.customers.map(item => ({
   id: item.id,
   name: item.name,
   phone: item.phone,
   channel: 'Cadastro',
+  paymentPreference: mapPaymentCondition(item.preferredPaymentCondition) && mapPaymentMethod(item.preferredPaymentMethod)
+    ? { condition: mapPaymentCondition(item.preferredPaymentCondition)!, method: mapPaymentMethod(item.preferredPaymentMethod)! }
+    : undefined,
   addresses: item.addresses.map(current => ({
     id: current.id,
     label: current.label,
@@ -85,11 +109,19 @@ const summaryItems = computed<OrderItem[]>(() => items.value.map((item, index) =
   }
 }))
 const subtotal = computed(() => summaryItems.value.reduce((total, item) => total + item.price, 0))
+const operationalDateValue = computed(() => parseDate(operationalDate.value))
+const discountLimit = computed(() => Math.max(0, subtotal.value + deliveryFee.value))
+const paymentConditionLabel = computed(() => paymentConditionOptions.find(option => option.value === paymentCondition.value)?.label)
+const paymentMethodLabel = computed(() => paymentMethodOptions.find(option => option.value === paymentMethod.value)?.label)
 const itemQuantity = computed(() => items.value.reduce((total, item) => total + item.quantity, 0))
 const summaryDeliveryWindow = computed(() => !customer.value ? undefined : fulfillmentType.value === 'Pickup' ? 'Retirada' : deliveryWindow.value)
 const selectedAddressId = computed(() => fulfillmentType.value === 'Delivery' ? address.value?.id : undefined)
 const canSave = computed(() => Boolean(customer.value && operationalDate.value && items.value.length
   && contactPhone.value.replace(/\D/g, '').length >= 10
+  && discount.value <= discountLimit.value
+  && (discount.value === 0 || discountReason.value.trim())
+  && (paymentCondition.value !== 'deferred' || paymentDueDate.value)
+  && (!paymentDueDate.value || paymentDueDate.value.toString() >= operationalDate.value)
   && (fulfillmentType.value === 'Pickup' || selectedAddressId.value && deliveryWindow.value.trim())))
 const editorSnapshot = computed(() => JSON.stringify({
   operationalDate: operationalDate.value,
@@ -98,7 +130,13 @@ const editorSnapshot = computed(() => JSON.stringify({
   fulfillmentType: fulfillmentType.value,
   contactPhone: contactPhone.value,
   deliveryWindow: deliveryWindow.value,
-  items: items.value
+  items: items.value,
+  paymentCondition: paymentCondition.value,
+  paymentMethod: paymentMethod.value,
+  paymentDueDate: paymentDueDate.value?.toString(),
+  deliveryFee: deliveryFee.value,
+  discount: discount.value,
+  discountReason: discountReason.value
 }))
 const isDirty = computed(() => initialSnapshot.value ? editorSnapshot.value !== initialSnapshot.value : Boolean(customer.value || items.value.length))
 
@@ -107,15 +145,19 @@ watch(customer, (current, previous) => {
   if (current?.id === previous?.id) return
   address.value = current?.addresses.length === 1 ? current.addresses[0] : undefined
   contactPhone.value = current?.phone ?? ''
+  paymentCondition.value = current?.paymentPreference?.condition ?? 'cash'
+  paymentMethod.value = current?.paymentPreference?.method ?? 'pix'
   deliveryWindow.value = getDefaultDeliveryWindow()
   if (previous) items.value = []
 }, { flush: 'sync' })
+watch(paymentCondition, condition => { if (condition !== 'deferred') paymentDueDate.value = undefined })
 watch(operationalDate, async () => {
   if (initializing) return
   items.value = []
   await loadContext()
 }, { flush: 'sync' })
-watch([customerId, operationalDate, items, fulfillmentType, contactPhone, address, deliveryWindow], () => {
+watch([customerId, operationalDate, items, fulfillmentType, contactPhone, address, deliveryWindow,
+  paymentCondition, paymentMethod, paymentDueDate, deliveryFee, discount, discountReason], () => {
   saveIdempotencyKey.value = crypto.randomUUID()
 }, { deep: true })
 
@@ -137,6 +179,25 @@ async function loadContext() {
   catch (cause) {
     if (sequence === contextSequence) error.value = cause instanceof Error ? cause.message : 'Não foi possível carregar a disponibilidade.'
   }
+}
+
+async function createQuickCustomer(input: QuickCustomerInput) {
+  if (!props.apiRequest) throw new Error('A sessão autenticada não está disponível.')
+  const result = await createCustomerForOrder(props.apiRequest, input)
+  await loadContext()
+  const created = customers.value.find(current => current.id === result.id)
+  if (!created) throw new Error('O cliente foi cadastrado, mas não pôde ser carregado no pedido.')
+  return created
+}
+
+async function createQuickAddress(input: QuickCustomerAddressInput) {
+  if (!props.apiRequest || !customer.value) throw new Error('Selecione um cliente antes de cadastrar o endereço.')
+  const customerId = customer.value.id
+  const result = await addCustomerAddressForOrder(props.apiRequest, customerId, input)
+  await loadContext()
+  const created = customer.value?.addresses.find(current => current.id === result.id)
+  if (!created) throw new Error('O endereço foi cadastrado, mas não pôde ser carregado no pedido.')
+  return created
 }
 
 function returnUrl() {
@@ -167,6 +228,14 @@ async function submit() {
         phone: contactPhone.value,
         addressId: selectedAddressId.value,
         deliveryWindow: fulfillmentType.value === 'Delivery' ? deliveryWindow.value.trim() : undefined
+      },
+      financial: {
+        paymentCondition: paymentCondition.value,
+        paymentMethod: paymentMethod.value,
+        paymentDueDate: paymentDueDate.value?.toString(),
+        deliveryFee: deliveryFee.value,
+        discountAmount: discount.value,
+        discountReason: discount.value ? discountReason.value.trim() : undefined
       },
       idempotencyKey: saveIdempotencyKey.value
     })
@@ -204,6 +273,12 @@ onMounted(async () => {
       }))
       fulfillmentType.value = order.fulfillment.type ?? 'Delivery'
       contactPhone.value = order.fulfillment.phone ?? customer.value?.phone ?? ''
+      paymentCondition.value = order.financial.paymentCondition
+      paymentMethod.value = order.financial.paymentMethod as PaymentMethod
+      paymentDueDate.value = order.financial.paymentDueDate ? parseDate(order.financial.paymentDueDate) : undefined
+      deliveryFee.value = order.financial.deliveryFee
+      discount.value = order.financial.discountAmount
+      discountReason.value = order.financial.discountReason ?? ''
       deliveryWindow.value = order.fulfillment.deliveryWindow ?? getDefaultDeliveryWindow()
       address.value = customer.value?.addresses.find(current => current.street === order.fulfillment.street && current.number === order.fulfillment.number)
     }
@@ -240,7 +315,7 @@ onBeforeUnmount(() => {
     <template v-else>
       <div class="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]">
         <div class="min-w-0 space-y-4">
-          <CustomerSection v-model="customer" :customers="customers" />
+          <CustomerSection v-model="customer" :customers="customers" :create-customer="createQuickCustomer" />
 
           <Card>
             <template #header><h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Data operacional</h2><p class="mt-1 text-sm text-slate-500">Ofertas, cardápio e capacidade serão consultados para esta data.</p></template>
@@ -254,6 +329,7 @@ onBeforeUnmount(() => {
             :fulfillment-type="fulfillmentType"
             :contact-phone="contactPhone"
             :show-validation="showValidation"
+            :create-address="createQuickAddress"
             @update:address="address = $event"
             @update:delivery-window="deliveryWindow = $event"
             @update:fulfillment-type="fulfillmentType = $event"
@@ -261,10 +337,28 @@ onBeforeUnmount(() => {
 
           <OrderItemsSection v-model="items" :context="context" :disabled="!customer" />
 
-          <Card :class="!items.length ? 'bg-slate-50 opacity-60' : ''" :aria-disabled="!items.length || undefined">
-            <template #header><h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Financeiro</h2><p class="mt-1 text-sm text-slate-500">Créditos, desconto, taxa e condição de pagamento são definidos ao confirmar o pedido.</p></template>
-            <Alert variants="info" size="small" title="Consolidação na confirmação" description="O rascunho preserva itens e atendimento. Os efeitos financeiros permanecem autoritativos no fluxo de confirmação."><template #icon><InfoIcon /></template></Alert>
-          </Card>
+          <FinancialSection
+            :enabled="Boolean(customer && items.length)"
+            :payment-condition="paymentCondition"
+            :payment-method="paymentMethod"
+            :payment-due-date="paymentDueDate"
+            :minimum-due-date="operationalDateValue"
+            :delivery-fee="deliveryFee"
+            :discount="discount"
+            :discount-limit="discountLimit"
+            :discount-reason="discountReason"
+            :use-plan-credit="false"
+            :compatible-plan-credit-count="0"
+            :compatible-plan-credit-value="0"
+            :use-financial-credit="false"
+            :financial-credit-balance="0"
+            :show-validation="showValidation"
+            @update:payment-condition="paymentCondition = $event"
+            @update:payment-method="paymentMethod = $event"
+            @update:payment-due-date="paymentDueDate = $event"
+            @update:delivery-fee="deliveryFee = $event"
+            @update:discount="discount = $event"
+            @update:discount-reason="discountReason = $event" />
         </div>
 
         <aside class="min-w-0 lg:sticky lg:top-6">
@@ -273,6 +367,11 @@ onBeforeUnmount(() => {
             :address="fulfillmentType === 'Delivery' ? address : undefined"
             :delivery-window="summaryDeliveryWindow"
             :items="summaryItems"
+            :delivery-fee="deliveryFee"
+            :discount="discount"
+            :payment-condition="paymentConditionLabel"
+            :payment-method="paymentMethodLabel"
+            :payment-due-date="paymentDueDate?.toString()"
             :saving="saving"
             :show-validation="showValidation"
             :save-label="props.mode === 'edit' ? 'Salvar alterações' : 'Salvar pedido'"
