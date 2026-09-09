@@ -26,7 +26,7 @@ export interface Customer {
   id: string
   name: string
   phone: string
-  channel: 'WhatsApp' | 'Telefone' | 'Balcão'
+  channel: 'WhatsApp' | 'Telefone' | 'Balcão' | 'Cadastro'
   restriction?: string
   preference?: string
   paymentPreference?: {

@@ -48,6 +48,25 @@ export interface ApiOrderSummary {
   totalAmount: number
 }
 
+export interface ApiOrderPage {
+  items: ApiOrderSummary[]
+  page: number
+  pageSize: number
+  total: number
+  counts: { all: number, open: number, inProgress: number, completed: number, problems: number }
+}
+
+export interface OrderListQuery {
+  from?: string
+  to?: string
+  search?: string
+  statusGroup?: 'All' | 'Open' | 'InProgress' | 'Completed' | 'Problems'
+  sortBy?: 'OperationalDate' | 'Customer' | 'Status' | 'ItemCount' | 'DailyCapacityUnits' | 'TotalAmount'
+  sortDirection?: 'Asc' | 'Desc'
+  page?: number
+  pageSize?: number
+}
+
 export interface ApiOrderDetails extends Omit<ApiOrderSummary, 'itemCount'> {
   items: ApiOrderItem[]
   fulfillment: ApiOrderFulfillment
@@ -143,8 +162,32 @@ async function json<T>(request: AuthenticatedApiRequest, path: string, init?: Re
 
 const jsonHeaders = { 'Content-Type': 'application/json' }
 
-export function listOrders(request: AuthenticatedApiRequest) {
-  return json<ApiOrderSummary[]>(request, '/api/orders')
+export async function listOrders(request: AuthenticatedApiRequest, query: OrderListQuery = {}) {
+  const parameters = new URLSearchParams()
+  Object.entries(query).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') parameters.set(key, String(value))
+  })
+  const suffix = parameters.size ? `?${parameters}` : ''
+  const result = await json<unknown>(request, `/api/orders${suffix}`)
+  if (!isOrderPage(result))
+    throw new Error('A API retornou um formato incompatível ao consultar os pedidos. Atualize a API e tente novamente.')
+  return result
+}
+
+function isOrderPage(value: unknown): value is ApiOrderPage {
+  if (!value || typeof value !== 'object') return false
+  const page = value as Partial<ApiOrderPage>
+  const counts = page.counts as Partial<ApiOrderPage['counts']> | undefined
+  return Array.isArray(page.items)
+    && typeof page.page === 'number'
+    && typeof page.pageSize === 'number'
+    && typeof page.total === 'number'
+    && Boolean(counts)
+    && typeof counts?.all === 'number'
+    && typeof counts.open === 'number'
+    && typeof counts.inProgress === 'number'
+    && typeof counts.completed === 'number'
+    && typeof counts.problems === 'number'
 }
 
 export function getOrder(request: AuthenticatedApiRequest, orderId: string) {

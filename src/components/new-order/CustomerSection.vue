@@ -5,24 +5,18 @@ import {
   Button,
   Card,
   Combobox,
-  Drawer,
   EmptyState,
-  Input,
   SearchIcon,
   TriangleAlertIcon
 } from '@thiagoschoeffel/ts-components'
-import { customers } from './mockData'
 import type { Customer } from './types'
 
-const props = defineProps<{ modelValue?: Customer }>()
+const props = withDefaults(defineProps<{ modelValue?: Customer, customers?: Customer[] }>(), { customers: () => [] })
 const emit = defineEmits<{
   'update:modelValue': [customer: Customer | undefined]
 }>()
 
 const search = ref('')
-const newCustomerOpen = ref(false)
-const newCustomerName = ref('')
-const newCustomerPhone = ref('')
 
 const matchingCustomers = computed(() => {
   const query = search.value.trim().toLocaleLowerCase('pt-BR')
@@ -30,7 +24,7 @@ const matchingCustomers = computed(() => {
     return []
 
   const normalizedQuery = query.replace(/\D/g, '')
-  return customers.filter((customer) =>
+  return props.customers.filter((customer) =>
     customer.name.toLocaleLowerCase('pt-BR').includes(query)
     || (normalizedQuery && customer.phone.replace(/\D/g, '').includes(normalizedQuery))
   )
@@ -47,25 +41,11 @@ function selectCustomer(customer: Customer) {
 }
 
 function selectCustomerById(customerId?: string) {
-  const customer = customers.find((current) => current.id === customerId)
+  const customer = props.customers.find((current) => current.id === customerId)
   if (customer)
     selectCustomer(customer)
 }
 
-function createCustomer() {
-  const customer: Customer = {
-    id: `customer-${Date.now()}`,
-    name: newCustomerName.value.trim(),
-    phone: newCustomerPhone.value.trim(),
-    channel: 'WhatsApp',
-    addresses: []
-  }
-  customers.push(customer)
-  selectCustomer(customer)
-  newCustomerOpen.value = false
-  newCustomerName.value = ''
-  newCustomerPhone.value = ''
-}
 </script>
 
 <template>
@@ -90,37 +70,8 @@ function createCustomer() {
             :bordered="false"
             size="small"
             title="Nenhum cliente encontrado"
-            description="Cadastre um novo cliente para continuar.">
+            description="Revise a busca ou cadastre o cliente na área de Clientes.">
             <template #icon><SearchIcon /></template>
-            <template #action>
-              <Drawer
-                v-model:open="newCustomerOpen"
-                side="right"
-                size="large"
-                title="Novo cliente"
-                description="Cadastre os dados essenciais para continuar o pedido.">
-                <template #trigger>
-                  <Button type="button" variant="secondary" size="small">
-                    Cadastrar novo cliente
-                  </Button>
-                </template>
-                <div class="space-y-4">
-                  <Input v-model="newCustomerName" label="Nome" required placeholder="Nome do cliente" />
-                  <Input v-model="newCustomerPhone" label="Telefone" required placeholder="(00) 00000-0000" />
-                </div>
-                <template #footer>
-                  <div class="flex justify-end">
-                    <Button
-                      type="button"
-                      variant="primary"
-                      :disabled="!newCustomerName.trim() || !newCustomerPhone.trim()"
-                      @click="createCustomer">
-                      Adicionar e usar
-                    </Button>
-                  </div>
-                </template>
-              </Drawer>
-            </template>
           </EmptyState>
           <EmptyState
             v-else

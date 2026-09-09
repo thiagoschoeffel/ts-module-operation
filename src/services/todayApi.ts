@@ -53,7 +53,7 @@ function valueOrUndefined<T>(result: PromiseSettledResult<T>) {
 
 export async function loadTodaySnapshot(request: AuthenticatedApiRequest, operationalDate = localDateIso()): Promise<TodaySnapshot> {
   const [orders, capacity, production, packing, logistics, menu] = await Promise.allSettled([
-    listOrders(request),
+    listOrders(request, { from: operationalDate, to: operationalDate, pageSize: 100 }),
     getDailyCapacity(request, operationalDate),
     getProductionSnapshot(request, operationalDate),
     getPackingQueue(request, operationalDate),
@@ -63,7 +63,7 @@ export async function loadTodaySnapshot(request: AuthenticatedApiRequest, operat
 
   return {
     operationalDate,
-    orders: valueOrUndefined(orders) ?? [],
+    orders: valueOrUndefined(orders)?.items ?? [],
     capacity: valueOrUndefined(capacity),
     production: valueOrUndefined(production),
     packing: valueOrUndefined(packing),
