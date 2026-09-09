@@ -1,115 +1,142 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
-import { Alert, Badge, Button, Card, EmptyState, Input, Select, TriangleAlertIcon } from '@thiagoschoeffel/ts-components'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { Alert, AlertDialog, Button, Card, CheckIcon, InfoIcon, Input, TriangleAlertIcon } from '@thiagoschoeffel/ts-components'
+import CustomerSection from '../components/new-order/CustomerSection.vue'
+import DeliverySection from '../components/new-order/DeliverySection.vue'
+import OrderItemsSection from '../components/new-order/OrderItemsSection.vue'
+import OrderSummary from '../components/new-order/OrderSummary.vue'
+import { formatCurrency, getDefaultDeliveryWindow } from '../components/new-order/mockData'
+import type { Customer, CustomerAddress, OrderItem } from '../components/new-order/types'
 import { getDailyCapacity, getOrder, getOrderAuthoringContext, saveOrder, type ApiDailyCapacity, type ApiOrderAuthoringContext, type ApiOrderFulfillmentType, type AuthenticatedApiRequest, type OrderItemInput } from '../services/ordersApi'
+import { localDateIso } from '../services/todayApi'
 import { navigate } from '../utils/navigation'
 
 const props = withDefaults(defineProps<{ mode?: 'create' | 'edit', orderId?: string, apiRequest?: AuthenticatedApiRequest }>(), { mode: 'create' })
-const today = new Date().toLocaleDateString('en-CA')
-const customerId = ref('')
+const operationalDate = ref(localDateIso())
+const customer = ref<Customer>()
+const address = ref<CustomerAddress>()
 const fulfillmentType = ref<ApiOrderFulfillmentType>('Delivery')
 const contactPhone = ref('')
-const addressId = ref('')
-const deliveryWindow = ref('11:00–12:00')
-const operationalDate = ref(today)
+const deliveryWindow = ref(getDefaultDeliveryWindow())
 const items = ref<OrderItemInput[]>([])
 const version = ref(0)
 const context = ref<ApiOrderAuthoringContext>()
 const capacity = ref<ApiDailyCapacity>()
 const loading = ref(true)
 const saving = ref(false)
+const showValidation = ref(false)
 const error = ref('')
 const success = ref('')
-const selectedOfferId = ref('')
-const selectedProducibleId = ref('')
-const selectedFrozenConfigurationId = ref('')
-const quantity = ref(1)
-const unitPrice = ref(0)
-const itemError = ref('')
+const cancelConfirmationOpen = ref(false)
+const initialSnapshot = ref('')
 const saveIdempotencyKey = ref(crypto.randomUUID())
+let navigationTimeout: ReturnType<typeof setTimeout> | undefined
+let contextSequence = 0
+let initializing = true
 
-const customerSelectOptions = computed(() => context.value?.customers.map(customer => ({ value: customer.id, label: customer.name, description: customer.phone })) ?? [])
-const customerName = computed(() => customerSelectOptions.value.find(option => option.value === customerId.value)?.label)
-const selectedCustomer = computed(() => context.value?.customers.find(customer => customer.id === customerId.value))
-const addressOptions = computed(() => selectedCustomer.value?.addresses.map(address => ({
-  value: address.id,
-  label: address.label,
-  description: [address.street, address.number, address.neighborhood, address.city].filter(Boolean).join(', ')
+const customers = computed<Customer[]>(() => context.value?.customers.map(item => ({
+  id: item.id,
+  name: item.name,
+  phone: item.phone,
+  channel: 'Cadastro',
+  addresses: item.addresses.map(current => ({
+    id: current.id,
+    label: current.label,
+    postalCode: current.postalCode ?? '',
+    street: current.street,
+    number: current.number ?? '',
+    complement: current.complement,
+    neighborhood: current.neighborhood ?? '',
+    city: current.city ?? '',
+    state: current.state ?? '',
+    referencePoint: current.reference
+  }))
 })) ?? [])
-const offerOptions = computed(() => context.value?.offers.map(offer => ({ value: offer.id, label: offer.name, description: offer.fulfillmentMode === 'FrozenStock' ? 'Atendido por estoque congelado' : 'Produção diária' })) ?? [])
-const producibleOptions = computed(() => context.value?.menuOptions.filter(item => item.availability === 'Available')
-  .map(item => ({ value: item.producibleItemId, label: `${item.category} · ${item.producibleItemName}` })) ?? [])
-const selectedOffer = computed(() => context.value?.offers.find(item => item.id === selectedOfferId.value))
-const frozenOptions = computed(() => context.value?.frozenConfigurations
-  .filter(item => !selectedOfferId.value || item.offerId === selectedOfferId.value)
-  .map(item => ({ value: item.id, label: `${item.producibleItemName} · ${item.presentation}`, description: `${item.availableQuantity} disponíveis · ${formatCurrency(item.unitPrice)}`, disabled: item.availableQuantity < 1 })) ?? [])
-const requestedDailyUnits = computed(() => items.value.reduce((total, item) => {
+const customerId = computed(() => customer.value?.id ?? '')
+const dailyProductionDemand = computed(() => items.value.reduce((total, item) => {
   const offer = context.value?.offers.find(current => current.id === item.offerId)
   return total + (offer?.fulfillmentMode === 'DailyProduction' ? item.quantity : 0)
 }, 0))
-const projectedAvailable = computed(() => capacity.value ? capacity.value.availableUnits - requestedDailyUnits.value : undefined)
-const canSave = computed(() => customerId.value && operationalDate.value && items.value.length
+const summaryItems = computed<OrderItem[]>(() => items.value.map((item, index) => {
+  const offer = context.value?.offers.find(current => current.id === item.offerId)
+  const producible = context.value?.producibles.find(current => current.id === item.producibleItemId)
+  const frozen = context.value?.frozenConfigurations.find(current => current.id === item.frozenConfigurationId)
+  const unitPrice = frozen?.unitPrice ?? item.unitPrice ?? 0
+  return {
+    id: `item-${index}`,
+    offerId: item.offerId,
+    name: offer?.name ?? 'Oferta',
+    price: unitPrice * item.quantity,
+    details: [`${frozen ? `${frozen.producibleItemName} · ${frozen.presentation}` : producible?.name ?? 'Opção do cardápio'} · ${item.quantity} ${item.quantity === 1 ? 'unidade' : 'unidades'}`],
+    additions: [],
+    fulfillmentSource: frozen ? 'frozen-stock' : 'daily-production',
+    frozenStock: frozen ? {
+      configurationId: frozen.id,
+      producibleItemId: frozen.producibleItemId,
+      producibleName: frozen.producibleItemName,
+      presentation: frozen.presentation,
+      unitPrice: frozen.unitPrice,
+      allocationStatus: 'pending',
+      allocations: []
+    } : undefined,
+    effectiveComponents: [],
+    customizations: [],
+    hasRestrictionConflict: false
+  }
+}))
+const subtotal = computed(() => summaryItems.value.reduce((total, item) => total + item.price, 0))
+const itemQuantity = computed(() => items.value.reduce((total, item) => total + item.quantity, 0))
+const summaryDeliveryWindow = computed(() => !customer.value ? undefined : fulfillmentType.value === 'Pickup' ? 'Retirada' : deliveryWindow.value)
+const selectedAddressId = computed(() => fulfillmentType.value === 'Delivery' ? address.value?.id : undefined)
+const canSave = computed(() => Boolean(customer.value && operationalDate.value && items.value.length
   && contactPhone.value.replace(/\D/g, '').length >= 10
-  && (fulfillmentType.value === 'Pickup' || Boolean(addressId.value && deliveryWindow.value.trim()))
-  && !saving.value)
+  && (fulfillmentType.value === 'Pickup' || selectedAddressId.value && deliveryWindow.value.trim())))
+const editorSnapshot = computed(() => JSON.stringify({
+  operationalDate: operationalDate.value,
+  customerId: customerId.value,
+  addressId: selectedAddressId.value,
+  fulfillmentType: fulfillmentType.value,
+  contactPhone: contactPhone.value,
+  deliveryWindow: deliveryWindow.value,
+  items: items.value
+}))
+const isDirty = computed(() => initialSnapshot.value ? editorSnapshot.value !== initialSnapshot.value : Boolean(customer.value || items.value.length))
 
-watch(operationalDate, loadContext)
-watch(selectedOfferId, () => {
-  selectedProducibleId.value = ''
-  selectedFrozenConfigurationId.value = ''
-  unitPrice.value = selectedOffer.value?.effectivePrice ?? 0
-})
-watch(customerId, () => {
-  contactPhone.value = selectedCustomer.value?.phone ?? ''
-  addressId.value = selectedCustomer.value?.addresses[0]?.id ?? ''
-})
-watch([customerId, operationalDate, items, fulfillmentType, contactPhone, addressId, deliveryWindow], () => { saveIdempotencyKey.value = crypto.randomUUID() }, { deep: true })
+watch(customer, (current, previous) => {
+  if (initializing) return
+  if (current?.id === previous?.id) return
+  address.value = current?.addresses.length === 1 ? current.addresses[0] : undefined
+  contactPhone.value = current?.phone ?? ''
+  deliveryWindow.value = getDefaultDeliveryWindow()
+  if (previous) items.value = []
+}, { flush: 'sync' })
+watch(operationalDate, async () => {
+  if (initializing) return
+  items.value = []
+  await loadContext()
+}, { flush: 'sync' })
+watch([customerId, operationalDate, items, fulfillmentType, contactPhone, address, deliveryWindow], () => {
+  saveIdempotencyKey.value = crypto.randomUUID()
+}, { deep: true })
 
 async function loadContext() {
   if (!props.apiRequest || !operationalDate.value) return
+  const sequence = ++contextSequence
   error.value = ''
   try {
     const [authoringContext, dailyCapacity] = await Promise.all([
       getOrderAuthoringContext(props.apiRequest, operationalDate.value),
       getDailyCapacity(props.apiRequest, operationalDate.value)
     ])
+    if (sequence !== contextSequence) return
+    const selectedCustomerId = customer.value?.id
     context.value = authoringContext
     capacity.value = dailyCapacity
+    if (selectedCustomerId) customer.value = customers.value.find(current => current.id === selectedCustomerId)
   }
-  catch (cause) { error.value = cause instanceof Error ? cause.message : 'Não foi possível carregar a disponibilidade.' }
-}
-
-function addItem() {
-  itemError.value = ''
-  if (!selectedOffer.value || quantity.value < 1) {
-    itemError.value = 'Selecione uma oferta e informe uma quantidade válida.'
-    return
+  catch (cause) {
+    if (sequence === contextSequence) error.value = cause instanceof Error ? cause.message : 'Não foi possível carregar a disponibilidade.'
   }
-  if (selectedOffer.value.fulfillmentMode === 'DailyProduction') {
-    if (!selectedProducibleId.value || selectedOffer.value.effectivePrice === undefined) {
-      itemError.value = 'Selecione uma opção disponível do cardápio publicado.'
-      return
-    }
-    items.value.push({ offerId: selectedOffer.value.id, producibleItemId: selectedProducibleId.value, unitPrice: selectedOffer.value.effectivePrice, quantity: quantity.value })
-  }
-  else {
-    const configuration = context.value?.frozenConfigurations.find(item => item.id === selectedFrozenConfigurationId.value)
-    if (!configuration || configuration.availableQuantity < quantity.value) {
-      itemError.value = 'Selecione uma configuração com estoque suficiente para a quantidade.'
-      return
-    }
-    items.value.push({ offerId: selectedOffer.value.id, frozenConfigurationId: configuration.id, quantity: quantity.value })
-  }
-  selectedOfferId.value = ''
-  quantity.value = 1
-}
-
-function removeItem(index: number) { items.value.splice(index, 1) }
-function itemLabel(item: OrderItemInput) {
-  const offer = context.value?.offers.find(current => current.id === item.offerId)
-  const producible = context.value?.producibles.find(current => current.id === item.producibleItemId)
-  const frozen = context.value?.frozenConfigurations.find(current => current.id === item.frozenConfigurationId)
-  return { name: offer?.name ?? 'Oferta', detail: frozen ? `${frozen.producibleItemName} · ${frozen.presentation}` : producible?.name ?? 'Item produzível', price: frozen?.unitPrice ?? item.unitPrice ?? 0 }
 }
 
 function returnUrl() {
@@ -117,124 +144,155 @@ function returnUrl() {
   return candidate && /^\/operacoes\/(?:pedidos|atendimento)(?:\?.*)?$/.test(candidate) ? candidate : '/operacoes/pedidos'
 }
 
+function cancel() {
+  if (isDirty.value) cancelConfirmationOpen.value = true
+  else navigate(returnUrl())
+}
+
 async function submit() {
-  if (!props.apiRequest || !canSave.value) return
+  showValidation.value = true
+  if (!props.apiRequest || !canSave.value || saving.value) return
   saving.value = true
   error.value = ''
   try {
     const saved = await saveOrder(props.apiRequest, {
       id: props.mode === 'edit' ? props.orderId : undefined,
-      customerId: customerId.value,
-      customerName: customerName.value,
+      customerId: customer.value!.id,
+      customerName: customer.value!.name,
       operationalDate: operationalDate.value,
       expectedVersion: version.value,
       items: items.value,
       fulfillment: {
         type: fulfillmentType.value,
         phone: contactPhone.value,
-        addressId: fulfillmentType.value === 'Delivery' ? addressId.value : undefined,
+        addressId: selectedAddressId.value,
         deliveryWindow: fulfillmentType.value === 'Delivery' ? deliveryWindow.value.trim() : undefined
       },
       idempotencyKey: saveIdempotencyKey.value
     })
-    success.value = props.mode === 'edit' ? 'Alterações salvas na API.' : 'Pedido criado como aberto na API.'
-    setTimeout(() => navigate(`/operacoes/pedidos/${saved.id}?retorno=${encodeURIComponent(returnUrl())}`), 500)
+    success.value = props.mode === 'edit' ? 'Alterações salvas.' : 'Pedido criado como aberto.'
+    initialSnapshot.value = editorSnapshot.value
+    navigationTimeout = setTimeout(() => navigate(`/operacoes/pedidos/${saved.id}?retorno=${encodeURIComponent(returnUrl())}`), 700)
   }
   catch (cause) { error.value = cause instanceof Error ? cause.message : 'Não foi possível salvar o pedido.' }
   finally { saving.value = false }
 }
 
-function formatCurrency(value: number) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value) }
+function warnBeforeUnload(event: BeforeUnloadEvent) {
+  if (!isDirty.value || success.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
 
 onMounted(async () => {
-  if (!props.apiRequest) {
-    error.value = 'A sessão autenticada não está disponível.'
-    loading.value = false
-    return
-  }
+  window.addEventListener('beforeunload', warnBeforeUnload)
+  if (!props.apiRequest) { error.value = 'A sessão autenticada não está disponível.'; loading.value = false; return }
   try {
     if (props.mode === 'edit' && props.orderId) {
       const order = await getOrder(props.apiRequest, props.orderId)
       if (order.status !== 'Open') throw new Error('Somente pedidos abertos podem ser editados.')
-      customerId.value = order.customerId
       operationalDate.value = order.operationalDate
       version.value = order.version
-      items.value = order.items.map(item => ({ offerId: item.offerId, quantity: item.quantity, unitPrice: item.fulfillmentMode === 'DailyProduction' ? item.unitPrice : undefined, frozenConfigurationId: item.frozenConfigurationId, producibleItemId: item.fulfillmentMode === 'DailyProduction' ? item.producibleItemId : undefined }))
       await loadContext()
+      customer.value = customers.value.find(current => current.id === order.customerId)
+      items.value = order.items.map(item => ({
+        offerId: item.offerId,
+        quantity: item.quantity,
+        unitPrice: item.fulfillmentMode === 'DailyProduction' ? item.unitPrice : undefined,
+        frozenConfigurationId: item.frozenConfigurationId,
+        producibleItemId: item.fulfillmentMode === 'DailyProduction' ? item.producibleItemId : undefined
+      }))
       fulfillmentType.value = order.fulfillment.type ?? 'Delivery'
-      contactPhone.value = order.fulfillment.phone ?? selectedCustomer.value?.phone ?? ''
-      deliveryWindow.value = order.fulfillment.deliveryWindow ?? '11:00–12:00'
-      addressId.value = selectedCustomer.value?.addresses.find(address => address.street === order.fulfillment.street
-        && address.number === order.fulfillment.number)?.id ?? selectedCustomer.value?.addresses[0]?.id ?? ''
+      contactPhone.value = order.fulfillment.phone ?? customer.value?.phone ?? ''
+      deliveryWindow.value = order.fulfillment.deliveryWindow ?? getDefaultDeliveryWindow()
+      address.value = customer.value?.addresses.find(current => current.street === order.fulfillment.street && current.number === order.fulfillment.number)
     }
-    else await loadContext()
+    else {
+      await loadContext()
+      const requestedCustomerId = new URLSearchParams(window.location.search).get('cliente')
+      customer.value = customers.value.find(current => current.id === requestedCustomerId)
+      address.value = customer.value?.addresses.length === 1 ? customer.value.addresses[0] : undefined
+      contactPhone.value = customer.value?.phone ?? ''
+      deliveryWindow.value = getDefaultDeliveryWindow()
+    }
+    initialSnapshot.value = editorSnapshot.value
   }
   catch (cause) { error.value = cause instanceof Error ? cause.message : 'Não foi possível carregar o pedido.' }
-  finally { loading.value = false }
+  finally { initializing = false; loading.value = false }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', warnBeforeUnload)
+  if (navigationTimeout) clearTimeout(navigationTimeout)
 })
 </script>
 
 <template>
-  <section aria-label="Formulário do pedido">
-    <div v-if="loading" class="space-y-4"><div v-for="index in 3" :key="index" class="h-40 animate-pulse rounded-lg border border-slate-200 bg-white" /></div>
-    <div v-else class="space-y-4">
-      <Alert v-if="error" variants="danger" title="Não foi possível concluir" :description="error"><template #icon><TriangleAlertIcon /></template></Alert>
-      <Alert v-if="success" variants="success" :description="success" />
-      <Card>
-        <template #header><h2 class="text-xs font-semibold uppercase tracking-wide text-slate-500">Identificação e data</h2></template>
-        <div class="grid gap-4 sm:grid-cols-2">
-          <Select v-model="customerId" label="Cliente" :options="customerSelectOptions" required />
-          <Input v-model="operationalDate" type="date" label="Data operacional" required />
-        </div>
-        <p class="mt-3 text-xs text-slate-500">A seleção usa somente clientes ativos do diretório autoritativo.</p>
-      </Card>
+  <div class="pb-20 lg:pb-0">
+    <Alert v-if="error" class="mb-4" variants="danger" title="Não foi possível concluir" :description="error"><template #icon><TriangleAlertIcon /></template></Alert>
+    <Alert v-if="success" class="mb-4" variants="success" :description="success"><template #icon><CheckIcon /></template></Alert>
 
-      <Card>
-        <template #header><h2 class="text-xs font-semibold uppercase tracking-wide text-slate-500">Entrega ou retirada</h2><p class="mt-1 text-sm text-slate-500">Esses dados serão preservados historicamente quando o pedido for confirmado.</p></template>
-        <div class="grid gap-4 sm:grid-cols-2">
-          <Select v-model="fulfillmentType" label="Modalidade" :options="[{ value: 'Delivery', label: 'Entrega' }, { value: 'Pickup', label: 'Retirada' }]" required />
-          <Input v-model="contactPhone" type="tel" label="Telefone de contato" required />
-          <Select v-if="fulfillmentType === 'Delivery'" v-model="addressId" label="Endereço" :options="addressOptions" required />
-          <Input v-if="fulfillmentType === 'Delivery'" v-model="deliveryWindow" label="Janela de entrega" placeholder="Ex.: 11:00–12:00" required />
-        </div>
-        <Alert v-if="fulfillmentType === 'Delivery' && customerId && !addressOptions.length" class="mt-3" variants="warning" description="Cadastre um endereço para o cliente antes de criar um pedido de entrega." />
-      </Card>
-
-      <Card>
-        <template #header><h2 class="text-xs font-semibold uppercase tracking-wide text-slate-500">Itens autoritativos</h2><p class="mt-1 text-sm text-slate-500">Ofertas, opções e preços vêm do cardápio publicado; congelados vêm do estoque elegível.</p></template>
-        <EmptyState v-if="!context?.offers.length" size="small" title="Nenhuma oferta disponível" description="Publique o cardápio deste dia ou disponibilize uma configuração de congelado antes de criar o pedido." />
-        <template v-else>
-          <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Select v-model="selectedOfferId" label="Oferta" placeholder="Selecione" :options="offerOptions" />
-            <Select v-if="selectedOffer?.fulfillmentMode === 'DailyProduction'" v-model="selectedProducibleId" label="Opção do cardápio" placeholder="Selecione" :options="producibleOptions" />
-            <Select v-else-if="selectedOffer?.fulfillmentMode === 'FrozenStock'" v-model="selectedFrozenConfigurationId" label="Configuração congelada" placeholder="Selecione" :options="frozenOptions" />
-            <Input v-if="selectedOffer?.fulfillmentMode === 'DailyProduction'" v-model="unitPrice" type="number" min="0" step="0.01" label="Preço publicado" disabled />
-            <Input v-if="selectedOffer" v-model="quantity" type="number" min="1" step="1" label="Quantidade" />
-          </div>
-          <Alert v-if="itemError" class="mt-3" variants="danger" :description="itemError" />
-          <Button v-if="selectedOffer" class="mt-4" type="button" size="small" variant="secondary" @click="addItem">Adicionar item</Button>
-        </template>
-
-        <div v-if="items.length" class="mt-5 space-y-2 border-t border-slate-100 pt-4">
-          <article v-for="(item, index) in items" :key="`${item.offerId}-${index}`" class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 p-3">
-            <div><p class="font-medium text-slate-800">{{ itemLabel(item).name }} <Badge v-if="item.frozenConfigurationId" variant="info">Congelado</Badge></p><p class="mt-1 text-sm text-slate-500">{{ itemLabel(item).detail }} · {{ item.quantity }} × {{ formatCurrency(itemLabel(item).price) }}</p></div>
-            <Button type="button" size="small" variant="danger" @click="removeItem(index)">Remover</Button>
-          </article>
-        </div>
-      </Card>
-
-      <Card>
-        <template #header><h2 class="text-xs font-semibold uppercase tracking-wide text-slate-500">Capacidade</h2></template>
-        <div v-if="capacity" class="grid gap-3 text-sm sm:grid-cols-4">
-          <p><span class="block text-slate-400">Total</span><strong>{{ capacity.totalUnits }}</strong></p>
-          <p><span class="block text-slate-400">Reservada</span><strong>{{ capacity.reservedUnits }}</strong></p>
-          <p><span class="block text-slate-400">Este pedido</span><strong>{{ requestedDailyUnits }}</strong></p>
-          <p><span class="block text-slate-400">Projeção</span><strong :class="projectedAvailable !== undefined && projectedAvailable < 0 ? 'text-red-600' : ''">{{ projectedAvailable }}</strong></p>
-        </div>
-        <p v-else class="text-sm text-slate-500">A capacidade ainda não foi configurada para esta data. A API fará a validação final na confirmação.</p>
-      </Card>
-
-      <div class="flex justify-end gap-3"><Button type="button" variant="secondary" @click="navigate(returnUrl())">Cancelar</Button><Button type="button" :disabled="!canSave" :loading="saving" @click="submit">{{ props.mode === 'edit' ? 'Salvar alterações' : 'Criar pedido aberto' }}</Button></div>
+    <div v-if="loading" class="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]">
+      <div class="space-y-4"><div v-for="index in 4" :key="index" class="h-40 animate-pulse rounded-lg border border-slate-200 bg-white" /></div>
+      <div class="hidden h-96 animate-pulse rounded-lg border border-slate-200 bg-white lg:block" />
     </div>
-  </section>
+
+    <template v-else>
+      <div class="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <div class="min-w-0 space-y-4">
+          <CustomerSection v-model="customer" :customers="customers" />
+
+          <Card>
+            <template #header><h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Data operacional</h2><p class="mt-1 text-sm text-slate-500">Ofertas, cardápio e capacidade serão consultados para esta data.</p></template>
+            <Input v-model="operationalDate" class="sm:max-w-xs" type="date" label="Data do pedido" required />
+          </Card>
+
+          <DeliverySection
+            :customer="customer"
+            :address="address"
+            :delivery-window="deliveryWindow"
+            :fulfillment-type="fulfillmentType"
+            :contact-phone="contactPhone"
+            :show-validation="showValidation"
+            @update:address="address = $event"
+            @update:delivery-window="deliveryWindow = $event"
+            @update:fulfillment-type="fulfillmentType = $event"
+            @update:contact-phone="contactPhone = $event" />
+
+          <OrderItemsSection v-model="items" :context="context" :disabled="!customer" />
+
+          <Card :class="!items.length ? 'bg-slate-50 opacity-60' : ''" :aria-disabled="!items.length || undefined">
+            <template #header><h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Financeiro</h2><p class="mt-1 text-sm text-slate-500">Créditos, desconto, taxa e condição de pagamento são definidos ao confirmar o pedido.</p></template>
+            <Alert variants="info" size="small" title="Consolidação na confirmação" description="O rascunho preserva itens e atendimento. Os efeitos financeiros permanecem autoritativos no fluxo de confirmação."><template #icon><InfoIcon /></template></Alert>
+          </Card>
+        </div>
+
+        <aside class="min-w-0 lg:sticky lg:top-6">
+          <OrderSummary
+            :customer="customer"
+            :address="fulfillmentType === 'Delivery' ? address : undefined"
+            :delivery-window="summaryDeliveryWindow"
+            :items="summaryItems"
+            :saving="saving"
+            :show-validation="showValidation"
+            :save-label="props.mode === 'edit' ? 'Salvar alterações' : 'Salvar pedido'"
+            :capacity-used="capacity?.reservedUnits ?? 0"
+            :capacity-limit="capacity?.totalUnits ?? 0"
+            :daily-production-demand="dailyProductionDemand"
+            @save="submit" />
+        </aside>
+      </div>
+
+      <div class="mt-5"><Button type="button" variant="secondary" @click="cancel">Cancelar</Button></div>
+
+      <div class="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-6 py-3 shadow-[0_-4px_16px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden">
+        <div class="flex w-full items-center justify-between gap-4">
+          <p class="text-sm font-medium text-slate-700">{{ itemQuantity }} itens · {{ formatCurrency(subtotal) }}</p>
+          <Button type="button" :loading="saving" @click="submit">{{ props.mode === 'edit' ? 'Salvar alterações' : 'Salvar pedido' }}</Button>
+        </div>
+      </div>
+    </template>
+
+    <AlertDialog v-model:open="cancelConfirmationOpen" title="Deseja sair?" description="As alterações não salvas serão perdidas." cancel-label="Continuar editando" confirm-label="Sair sem salvar" confirm-variant="danger" @confirm="navigate(returnUrl())" />
+  </div>
 </template>

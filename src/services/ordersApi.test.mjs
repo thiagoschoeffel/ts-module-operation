@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { ApiConflictError, cancelOrder, getDailyCapacity, saveOrder } from './ordersApi.ts'
+import { ApiConflictError, cancelOrder, getDailyCapacity, listOrders, saveOrder } from './ordersApi.ts'
 
 const order = {
   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -39,6 +39,25 @@ test('sends create and edit mutations with version and idempotency', async () =>
 test('maps missing capacity to an unconfigured day', async () => {
   const result = await getDailyCapacity(async () => new Response(null, { status: 404 }), '2026-09-04')
   assert.equal(result, undefined)
+})
+
+test('sends order history filters and pagination as query parameters', async () => {
+  let requestedPath
+  const page = { items: [], page: 2, pageSize: 10, total: 0, counts: { all: 0, open: 0, inProgress: 0, completed: 0, problems: 0 } }
+  const result = await listOrders(async path => {
+    requestedPath = path
+    return new Response(JSON.stringify(page), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  }, { from: '2026-09-01', to: '2026-09-09', statusGroup: 'Completed', page: 2, pageSize: 10 })
+
+  assert.equal(requestedPath, '/api/orders?from=2026-09-01&to=2026-09-09&statusGroup=Completed&page=2&pageSize=10')
+  assert.deepEqual(result, page)
+})
+
+test('rejects the legacy order array without breaking the consuming component', async () => {
+  await assert.rejects(
+    () => listOrders(async () => new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } })),
+    /formato incompatível/
+  )
 })
 
 test('surfaces concurrency conflicts distinctly', async () => {
